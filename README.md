@@ -1,7 +1,9 @@
 
-# Fusion Furniture Tools
+# DIY Garage Cut Fusion360 Addons
 
-Fusion 360 Add-in und Export-Skripte für Möbelbau, Zuschnittoptimierung und Fertigungsinformationen.
+Dieses Repository ist ein Unterrepo von `DIY Garage Cut` und enthält die Fusion-360-Inhalte, mit denen das Hauptprojekt um CAD-nahe Fertigungsdaten erweitert wird.
+
+Die README ist bewusst als Einstieg für spätere Mitwirkende und Nutzer geschrieben. Die fachlich-technischen Projektdetails werden zusätzlich in separaten Markdown-Dateien dokumentiert, damit der Überblick erhalten bleibt.
 
 ## Ziel
 
@@ -22,6 +24,18 @@ Die Zuschnitt- und Fertigungslogik wird in externen Tools verarbeitet.
 Das Add-in dient ausschließlich dazu:
 - Fertigungsinformationen im Modell zu hinterlegen
 - strukturierte Daten zu exportieren
+
+## Projektdokumentation
+
+Für die inhaltliche und technische Übersicht gibt es zusätzlich:
+
+- [docs/projektuebersicht.md](docs/projektuebersicht.md)
+- [docs/github-workflow.md](docs/github-workflow.md)
+- [docs/datenmodell.md](docs/datenmodell.md)
+- [docs/architektur.md](docs/architektur.md)
+- [docs/workflow.md](docs/workflow.md)
+- [docs/lastenheft.md](docs/lastenheft.md)
+- [docs/roadmap.md](docs/roadmap.md)
 
 ## Arbeitsmodell
 
@@ -63,7 +77,7 @@ Zusätzliche Metadaten:
 ## Projektstruktur
 
 ```text
-fusion-furniture-tools/
+DIY-Garage-Cut-Fusion360-Addons/
 │
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
@@ -97,5 +111,4 @@ fusion-furniture-tools/
 
 ## Lizenz
 
-Zunächst private Entwicklung.
-Später eventuell Open Source.
+Es gilt die Projektlizenz aus dem Hauptprojekt, siehe [LICENSE](LICENSE).
