@@ -163,9 +163,10 @@ def _get_dimensions_from_bounding_box(body):
         bbox = body.boundingBox
         min_p = bbox.minPoint
         max_p = bbox.maxPoint
-        width = abs(max_p.x - min_p.x)
-        height = abs(max_p.y - min_p.y)
-        depth = abs(max_p.z - min_p.z)
+        # Fusion-BoundingBox ist typischerweise in cm, Export soll in mm sein.
+        width = abs(max_p.x - min_p.x) * 10.0
+        height = abs(max_p.y - min_p.y) * 10.0
+        depth = abs(max_p.z - min_p.z) * 10.0
         return _fmt_num(width), _fmt_num(height), _fmt_num(depth)
     except Exception as exc:
         print(f"CSV-Export: BoundingBox-Fehler bei Body: {exc}")
@@ -192,16 +193,20 @@ def _collect_attributes_as_text(body):
     entries = []
     try:
         attributes = getattr(body, "attributes", None)
-        if not attributes or attributes.count < 1:
-            return "-"
-        for i in range(attributes.count):
-            attr = attributes.item(i)
-            if not attr:
-                continue
-            group = attr.groupName if attr.groupName else "-"
-            name = attr.name if attr.name else "-"
-            value = attr.value if attr.value is not None else "-"
-            entries.append(f"{group}:{name}={value}")
+        if attributes is not None and attributes.count > 0:
+            for i in range(attributes.count):
+                attr = attributes.item(i)
+                if not attr:
+                    continue
+                group = attr.groupName if attr.groupName else "-"
+                name = attr.name if attr.name else "-"
+                value = attr.value if attr.value is not None else "-"
+                entries.append(f"{group}:{name}={value}")
+
+        # Fallback aus Properties-AddIn: Design-/Root-Attribute mit Body-Token-Prefix.
+        token = _get_entity_token(body)
+        if token:
+            entries.extend(_collect_design_fallback_attributes(token))
     except Exception as exc:
         print(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}")
         return "-"
@@ -209,11 +214,55 @@ def _collect_attributes_as_text(body):
 
 
 def _write_csv(path, rows):
-    header = ["body_name", "width", "height", "depth", "material", "appearance", "attributes"]
+    header = ["body_name", "width_mm", "height_mm", "depth_mm", "material", "appearance", "attributes"]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(header)
         writer.writerows(rows)
+
+
+def _get_entity_token(entity):
+    try:
+        token = getattr(entity, "entityToken", None)
+        if token:
+            return str(token)
+    except Exception:
+        pass
+    return None
+
+
+def _collect_design_fallback_attributes(token):
+    try:
+        app = adsk.core.Application.get()
+        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+        if not design:
+            return []
+
+        attrs = None
+        root = getattr(design, "rootComponent", None)
+        if root:
+            attrs = getattr(root, "attributes", None)
+        if attrs is None:
+            attrs = getattr(design, "attributes", None)
+        if attrs is None or attrs.count < 1:
+            return []
+
+        prefix = f"body_token::{token}::"
+        mapped = []
+        for i in range(attrs.count):
+            attr = attrs.item(i)
+            if not attr:
+                continue
+            name = attr.name or ""
+            if not name.startswith(prefix):
+                continue
+            key = name[len(prefix):]
+            val = attr.value if attr.value is not None else "-"
+            mapped.append(f"{attr.groupName}:{key}={val}")
+        return mapped
+    except Exception as exc:
+        print(f"CSV-Export: Design-Fallback-Attribute konnten nicht gelesen werden: {exc}")
+        return []
 
 
 def _get_or_create_panel(workspace):

@@ -176,10 +176,10 @@ So testest du es in Fusion 360:
 Was wurde gebaut:
 
 - Export aller sichtbaren Bodies in eine UTF-8-CSV-Datei.
-- CSV-Header: `body_name,width,height,depth,material,appearance,attributes`
+- CSV-Header: `body_name,width_mm,height_mm,depth_mm,material,appearance,attributes`
 - Pro Body:
 - Name des Bodies
-- BoundingBox-Masse (`width`, `height`, `depth`)
+- BoundingBox-Masse in Millimeter (`width_mm`, `height_mm`, `depth_mm`)
 - Materialname
 - Appearance-Name
 - vorhandene Attribute als kompakter Text (`gruppe:key=value;...`)
