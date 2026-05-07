@@ -1,0 +1,45 @@
+# Mitmachen und Arbeiten
+
+Dieses Projekt arbeitet nach einem klaren Issue- und Pull-Request-Modell.
+
+## Grundregeln
+
+- Jedes Thema bekommt genau ein GitHub-Issue.
+- Zu jedem Issue gibt es genau einen Arbeits-Thread.
+- Zu jedem Issue gibt es genau einen Pull Request.
+- Ein PR soll nur ein fachlich zusammenhängendes Thema enthalten.
+- `main` wird nicht direkt bearbeitet, sondern nur über Pull Requests.
+
+## Arbeitsablauf
+
+1. Issue anlegen oder ein bestehendes Issue auswählen.
+2. Einen Branch pro Issue erstellen.
+3. Im Issue diskutieren und Entscheidungen festhalten.
+4. Code und Doku im gleichen PR umsetzen.
+5. PR mit dem Issue verknüpfen.
+6. Nach Merge das Issue schließen.
+
+## Definition of Done
+
+Ein Issue gilt erst als fertig, wenn:
+
+- die technische Umsetzung vorhanden ist
+- die Dokumentation angepasst wurde
+- eine sinnvolle Prüfung oder ein Test vorhanden ist
+- der Pull Request referenziert und zusammengeführt wurde
+- das Issue abgeschlossen werden kann
+
+## Branch-Namen
+
+Empfohlenes Schema:
+
+```text
+codex/issue-<nummer>-<kurzname>
+```
+
+## Kommentar- und Diskussionsregeln
+
+- Offene fachliche Fragen werden im Issue geklärt.
+- Entscheidungen werden im Issue dokumentiert, nicht nur im PR.
+- Wenn ein Issue komplex ist, bleiben Teilfragen trotzdem im selben Thread.
+
