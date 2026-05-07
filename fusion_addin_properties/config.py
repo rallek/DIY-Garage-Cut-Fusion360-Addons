@@ -1,26 +1,21 @@
 COMPANY_NAME = "DIYGarageCut"
-ADDIN_NAME = "DIYGarageCutAddin"
+ADDIN_NAME = "DIYGarageCutPropertiesAddin"
 
 WORKSPACE_ID = "FusionSolidEnvironment"
 PRIMARY_PANEL_ID = "SolidModifyPanel"
 PANEL_IDS = [
     "SolidModifyPanel",
+    "SolidToolsPanel",
     "SolidCreatePanel",
     "SolidScriptsAddinsPanel",
-    "SolidToolsPanel"
 ]
 CUSTOM_TAB_ID = "SolidTab"
 CUSTOM_PANEL_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_Panel"
 CUSTOM_PANEL_NAME = "DIY Garage Cut"
-COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_HelloCommand"
-COMMAND_NAME = "DIY Garage Cut Export"
-COMMAND_TOOLTIP = "Exportiert sichtbare Bodies als CSV-Datei."
+COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_PropertiesCommand"
+COMMAND_NAME = "DIYGC Eigenschaften"
+COMMAND_TOOLTIP = "Eigenschaften fuer einen Body anzeigen und aendern."
 COMMAND_RESOURCES = "./Resources"
-
-PROPERTIES_COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_PropertiesCommand"
-PROPERTIES_COMMAND_NAME = "DIY Garage Cut Eigenschaften"
-PROPERTIES_COMMAND_TOOLTIP = "Eigenschaften fuer einen Body anzeigen und aendern."
-PROPERTIES_COMMAND_RESOURCES = "./ResourcesProperties"
 
 ATTRIBUTE_GROUP = f"{COMPANY_NAME}.part_metadata"
 ATTR_KEY_MATERIAL_TYP = "material_typ"

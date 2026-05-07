@@ -3,14 +3,12 @@ import adsk.fusion
 import csv
 import re
 
-import config
-from . import command_properties
+import export_config as config
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
-_marking_menu_handler = None
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -33,8 +31,8 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
         try:
             _run_export_mode(app, ui)
         except Exception as exc:
-            print(f"Command-Fehler: {exc}")
-            ui.messageBox(f"Befehl fehlgeschlagen:\n{exc}")
+            print(f"Export-Command-Fehler: {exc}")
+            ui.messageBox(f"CSV-Export fehlgeschlagen:\n{exc}")
 
 
 def _run_export_mode(app, ui):
@@ -63,13 +61,10 @@ def _pick_export_path(app, ui):
         dialog.filter = "CSV-Dateien (*.csv);;Alle Dateien (*.*)"
         dialog.filterIndex = 0
         dialog.initialFilename = _build_default_export_filename(app)
-        print("CSV-Export: Oeffne Speichern-Dialog...")
         result = dialog.showSave()
-        print(f"CSV-Export: Dialog-Ergebnis = {result}")
         filename = dialog.filename if getattr(dialog, "filename", None) else ""
         if result == adsk.core.DialogResults.DialogOK and filename:
             return filename
-        print("CSV-Export: Kein gueltiger Dateiname aus Dialog.")
         return None
     except Exception as exc:
         print(f"CSV-Export: Dateidialog fehlgeschlagen: {exc}")
@@ -82,7 +77,6 @@ def _build_default_export_filename(app):
         document = app.activeDocument if app else None
         name = document.name if document else ""
         if name:
-            # ".f3d" entfernen, falls enthalten.
             if name.lower().endswith(".f3d"):
                 name = name[:-4]
             cleaned = re.sub(r'[<>:"/\\|?*]', "_", name).strip()
@@ -96,7 +90,6 @@ def _build_default_export_filename(app):
 def _collect_visible_body_rows(app):
     rows = []
     seen_tokens = set()
-
     design = adsk.fusion.Design.cast(app.activeProduct)
     if not design:
         print("CSV-Export: Kein aktives Fusion-Design.")
@@ -106,7 +99,6 @@ def _collect_visible_body_rows(app):
     if root:
         _append_component_bodies(root, rows, seen_tokens)
         _append_occurrence_bodies_recursive(root.occurrences, rows, seen_tokens)
-
     return rows
 
 
@@ -224,52 +216,6 @@ def _write_csv(path, rows):
         writer.writerows(rows)
 
 
-class _MarkingMenuHandler(adsk.core.MarkingMenuEventHandler):
-    def notify(self, args):
-        try:
-            event_args = adsk.core.MarkingMenuEventArgs.cast(args)
-            app = adsk.core.Application.get()
-            ui = app.userInterface
-
-            # Auswahl robust aus activeSelections lesen (zuverlaessiger als manche Event-Felder).
-            sels = ui.activeSelections
-            if not sels or sels.count < 1:
-                return
-
-            first = sels.item(0).entity if sels.item(0) else None
-            if not first:
-                return
-
-            obj_type = first.objectType or ""
-            # Auch Proxy-Typen erlauben, die in Assemblies haeufig auftreten.
-            is_supported = (
-                "BRepBody" in obj_type
-                or "Occurrence" in obj_type
-                or "Component" in obj_type
-            )
-            if not is_supported:
-                return
-
-            cmd_def = ui.commandDefinitions.itemById(config.COMMAND_ID)
-            if not cmd_def:
-                return
-
-            # In alle erreichbaren Menuebereiche einfuegen.
-            menus = []
-            if event_args.linearMarkingMenu:
-                menus.append(event_args.linearMarkingMenu)
-            if event_args.radialMarkingMenu:
-                menus.append(event_args.radialMarkingMenu)
-
-            for menu in menus:
-                existing = menu.controls.itemById(config.COMMAND_ID)
-                if not existing:
-                    menu.controls.addCommand(cmd_def)
-        except Exception:
-            # Kontextmenue darf Fusion nicht stoeren.
-            return
-
-
 def _get_or_create_panel(workspace):
     global _active_panel_id
 
@@ -299,7 +245,7 @@ def _get_or_create_panel(workspace):
 
 
 def start():
-    global _active_panel_id, _is_started, _command_created_handler, _marking_menu_handler
+    global _active_panel_id, _is_started, _command_created_handler
     if _is_started:
         return
 
@@ -312,16 +258,12 @@ def start():
             config.COMMAND_ID,
             config.COMMAND_NAME,
             config.COMMAND_TOOLTIP,
-            config.COMMAND_RESOURCES
+            config.COMMAND_RESOURCES,
         )
 
     _command_created_handler = _CommandCreatedHandler()
     cmd_def.commandCreated.add(_command_created_handler)
     _handlers.append(_command_created_handler)
-
-    _marking_menu_handler = _MarkingMenuHandler()
-    ui.markingMenuDisplaying.add(_marking_menu_handler)
-    _handlers.append(_marking_menu_handler)
     _is_started = True
 
     workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
@@ -341,23 +283,14 @@ def start():
             control.isPromotedByDefault = True
             control.isPromoted = True
         except Exception:
-            # Manche Fusion-Versionen erlauben diese Flags nicht in allen Panels.
             pass
 
-    command_properties.start(panel)
 
 def stop():
-    global _active_panel_id, _is_started, _command_created_handler, _marking_menu_handler
+    global _active_panel_id, _is_started, _command_created_handler
     app = adsk.core.Application.get()
     ui = app.userInterface
     cmd_def = ui.commandDefinitions.itemById(config.COMMAND_ID)
-
-    if _marking_menu_handler:
-        try:
-            ui.markingMenuDisplaying.remove(_marking_menu_handler)
-        except Exception:
-            pass
-        _marking_menu_handler = None
 
     if cmd_def and _command_created_handler:
         try:
@@ -368,25 +301,8 @@ def stop():
 
     workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
     if workspace:
-        panel = None
-        if _active_panel_id:
-            panel = workspace.toolbarPanels.itemById(_active_panel_id)
-            if not panel:
-                tab = workspace.toolbarTabs.itemById(config.CUSTOM_TAB_ID)
-                if tab:
-                    panel = tab.toolbarPanels.itemById(_active_panel_id)
-        if not panel:
-            for panel_id in config.PANEL_IDS:
-                candidate = workspace.toolbarPanels.itemById(panel_id)
-                if candidate:
-                    panel = candidate
-                    break
-        if not panel:
-            tab = workspace.toolbarTabs.itemById(config.CUSTOM_TAB_ID)
-            if tab:
-                panel = tab.toolbarPanels.itemById(config.CUSTOM_PANEL_ID)
+        panel = workspace.toolbarPanels.itemById(_active_panel_id) if _active_panel_id else None
         if panel:
-            command_properties.stop(panel)
             control = panel.controls.itemById(config.COMMAND_ID)
             if control:
                 control.deleteMe()

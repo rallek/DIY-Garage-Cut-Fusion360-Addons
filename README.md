@@ -123,8 +123,9 @@ Es gilt die Projektlizenz aus dem Hauptprojekt, siehe [LICENSE](LICENSE).
 1. Dieses Repo lokal herunterladen oder klonen.
 2. In Fusion 360 auf `Dienstprogramme > Add-Ins` gehen.
 3. Im Reiter `Add-Ins` auf `+` (lokales Add-in hinzufuegen) klicken.
-4. Den Ordner `fusion_addin` aus diesem Repo auswaehlen.
-5. Das Add-in `DIYGarageCutAddin` markieren, auf `Ausfuehren` klicken und `Beim Start ausfuehren` aktivieren.
+4. Fuer den CSV-Export den Ordner `fusion_addin_export` aus diesem Repo auswaehlen.
+5. Fuer Eigenschaften den Ordner `fusion_addin_properties` aus diesem Repo auswaehlen.
+6. Beide Add-ins markieren, auf `Ausfuehren` klicken und bei Bedarf `Beim Start ausfuehren` aktivieren.
 
 Hinweis: Diese Klicks brauchst du normalerweise nur beim ersten Einrichten. Danach startet das Add-in automatisch mit Fusion 360.
 
@@ -138,7 +139,7 @@ Er erscheint in der normalen Konstruktionsoberflaeche:
 2. In die Registerkarte `Volumenkorper` (Solid) wechseln.
 3. Nach dem Button `DIY Garage Cut` in den ueblichen Solid-Panels suchen (je nach Fusion-Version z. B. `Skripte und Add-Ins`, `Erstellen` oder `Werkzeuge`).
 4. Wenn moeglich wird der Button von Fusion direkt sichtbar in der Toolbar angezeigt; sonst liegt er im `>>`-Ueberlauf.
-5. Klick auf den Button zeigt aktuell eine Meldung: `DIY Garage Cut Add-in Grundgeruest laeuft.`
+5. Klick auf den Button startet den CSV-Export-Dialog.
 
 ### 3) Wenn nichts sichtbar ist (Troubleshooting)
 
@@ -169,3 +170,25 @@ So testest du es in Fusion 360:
 3. Befehl `DIY Garage Cut` ausfuehren (Toolbar oder Kontextmenue).
 4. Erwartung: MessageBox zeigt Namespace und die vier gelesenen Testwerte.
 5. Ohne Koerper-Auswahl oder bei falscher Auswahl gibt es eine klare Hinweis-Meldung statt Absturz.
+
+## Stand Issue #4: CSV-Export V1
+
+Was wurde gebaut:
+
+- Export aller sichtbaren Bodies in eine UTF-8-CSV-Datei.
+- CSV-Header: `body_name,width,height,depth,material,appearance,attributes`
+- Pro Body:
+- Name des Bodies
+- BoundingBox-Masse (`width`, `height`, `depth`)
+- Materialname
+- Appearance-Name
+- vorhandene Attribute als kompakter Text (`gruppe:key=value;...`)
+- Defensives Fehlerverhalten mit `try/except` und Logging ueber `print()`.
+
+So verwendest du den Export:
+
+1. Add-in in Fusion 360 starten (siehe Installationsschritte oben).
+2. Sicherstellen, dass sichtbare Bodies im aktiven Design vorhanden sind.
+3. Button `DIY Garage Cut` ausfuehren.
+4. Speicherort und Dateiname im Dialog waehlen.
+5. Erwartung: CSV-Datei wird gespeichert und eine Erfolgsmeldung mit Anzahl exportierter Bodies erscheint.
