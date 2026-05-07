@@ -16,6 +16,8 @@ Wir arbeiten nachvollziehbar, klein geschnitten und versionierbar.
 - Diskussionen und Entscheidungen laufen zuerst im Issue, nicht verstreut in mehreren Stellen.
 - Ein zweites menschliches PR-Approval ist für dieses Solo-Projekt nicht verpflichtend.
 - Als Review gilt ein sauber dokumentierter Codex-Review-Thread oder eine gleichwertige technische Selbstprüfung.
+- Das Mergen auf GitHub bleibt in deiner Hand.
+- Ich bereite PRs vor, aber ich führe keinen Merge selbst aus.
 
 ## Issue-Struktur
 
@@ -74,6 +76,6 @@ Ein Issue ist erst erledigt, wenn:
 - die Umsetzung fertig ist
 - die Doku aktualisiert ist
 - eine technische Prüfung vorhanden ist
-- der PR gemerged wurde
+- du den PR auf GitHub gemerged hast
 - das Issue geschlossen werden kann
 - die Prüfung nachvollziehbar dokumentiert ist, auch wenn sie nicht als formales GitHub-Approval einer zweiten Person vorliegt
