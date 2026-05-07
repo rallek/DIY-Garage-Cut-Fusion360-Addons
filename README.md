@@ -94,10 +94,13 @@ DIY-Garage-Cut-Fusion360-Addons/
 │
 ├── fusion_addin/
 │   ├── commands/
+│   │   ├── __init__.py
+│   │   └── command_core.py
 │   ├── lib/
 │   ├── Resources/
-│   ├── manifest.json
-│   └── FusionFurnitureTools.py
+│   ├── DIYGarageCutAddin.manifest
+│   ├── DIYGarageCutAddin.py
+│   └── config.py
 │
 ├── examples/
 │   ├── csv/
@@ -112,3 +115,35 @@ DIY-Garage-Cut-Fusion360-Addons/
 ## Lizenz
 
 Es gilt die Projektlizenz aus dem Hauptprojekt, siehe [LICENSE](LICENSE).
+
+## Installation und erster Test (Windows, Anwender)
+
+### 1) Add-in in Fusion 360 einbinden
+
+1. Dieses Repo lokal herunterladen oder klonen.
+2. In Fusion 360 auf `Dienstprogramme > Add-Ins` gehen.
+3. Im Reiter `Add-Ins` auf `+` (lokales Add-in hinzufuegen) klicken.
+4. Den Ordner `fusion_addin` aus diesem Repo auswaehlen.
+5. Das Add-in `DIYGarageCutAddin` markieren, auf `Ausfuehren` klicken und `Beim Start ausfuehren` aktivieren.
+
+Hinweis: Diese Klicks brauchst du normalerweise nur beim ersten Einrichten. Danach startet das Add-in automatisch mit Fusion 360.
+
+### 2) Wo muss der Button sichtbar sein?
+
+Der Button erscheint **nicht** im Add-in-Dialog selbst.
+
+Er erscheint in der normalen Konstruktionsoberflaeche:
+
+1. In den Workspace `Design` wechseln.
+2. In die Registerkarte `Volumenkorper` (Solid) wechseln.
+3. Nach dem Button `DIY Garage Cut` in den ueblichen Solid-Panels suchen (je nach Fusion-Version z. B. `Skripte und Add-Ins`, `Erstellen` oder `Werkzeuge`).
+4. Wenn moeglich wird der Button von Fusion direkt sichtbar in der Toolbar angezeigt; sonst liegt er im `>>`-Ueberlauf.
+5. Klick auf den Button zeigt aktuell eine Meldung: `DIY Garage Cut Add-in Grundgeruest laeuft.`
+
+### 3) Wenn nichts sichtbar ist (Troubleshooting)
+
+1. Pruefen, dass das Add-in im Dialog wirklich auf `Laeuft` steht.
+2. Fusion 360 komplett neu starten (nicht nur Fenster schliessen).
+3. Sicherstellen, dass als lokaler Add-in-Ordner wirklich `fusion_addin` gewaehlt wurde (darin liegen `DIYGarageCutAddin.py` und `DIYGarageCutAddin.manifest`).
+4. In `Design > Volumenkorper` nachsehen, ob der Button rechts im `>>`-Ueberlaufmenue der Toolbar steckt.
+5. Falls weiterhin nichts erscheint: Add-in im Dialog stoppen und erneut starten.
