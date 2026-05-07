@@ -11,6 +11,8 @@ Dieses Projekt arbeitet nach einem klaren Issue- und Pull-Request-Modell.
 - `main` wird nicht direkt bearbeitet, sondern nur über Pull Requests.
 - Als Review reicht in diesem Projekt ein sauber dokumentierter Codex-Review-Thread oder eine gleichwertige technische Selbstprüfung.
 - Ein zweites menschliches GitHub-Approval ist für dieses Solo-Setup nicht verpflichtend.
+- Das eigentliche Mergen auf GitHub machst du selbst.
+- Ich bereite Branch, Commit und Pull Request vor, aber ich führe keinen Merge aus.
 
 ## Arbeitsablauf
 
@@ -19,7 +21,8 @@ Dieses Projekt arbeitet nach einem klaren Issue- und Pull-Request-Modell.
 3. Im Issue diskutieren und Entscheidungen festhalten.
 4. Code und Doku im gleichen PR umsetzen.
 5. PR mit dem Issue verknüpfen.
-6. Nach Merge das Issue schließen.
+6. Du mergst den PR auf GitHub selbst.
+7. Danach wird das Issue geschlossen.
 
 ## Definition of Done
 
