@@ -22,6 +22,52 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
         ui.messageBox("DIY Garage Cut Add-in Grundgeruest laeuft.")
 
 
+class _MarkingMenuHandler(adsk.core.MarkingMenuEventHandler):
+    def notify(self, args):
+        try:
+            event_args = adsk.core.MarkingMenuEventArgs.cast(args)
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+
+            # Auswahl robust aus activeSelections lesen (zuverlaessiger als manche Event-Felder).
+            sels = ui.activeSelections
+            if not sels or sels.count < 1:
+                return
+
+            first = sels.item(0).entity if sels.item(0) else None
+            if not first:
+                return
+
+            obj_type = first.objectType or ""
+            # Auch Proxy-Typen erlauben, die in Assemblies haeufig auftreten.
+            is_supported = (
+                "BRepBody" in obj_type
+                or "Occurrence" in obj_type
+                or "Component" in obj_type
+            )
+            if not is_supported:
+                return
+
+            cmd_def = ui.commandDefinitions.itemById(config.COMMAND_ID)
+            if not cmd_def:
+                return
+
+            # In alle erreichbaren Menuebereiche einfuegen.
+            menus = []
+            if event_args.linearMarkingMenu:
+                menus.append(event_args.linearMarkingMenu)
+            if event_args.radialMarkingMenu:
+                menus.append(event_args.radialMarkingMenu)
+
+            for menu in menus:
+                existing = menu.controls.itemById(config.COMMAND_ID)
+                if not existing:
+                    menu.controls.addCommand(cmd_def)
+        except Exception:
+            # Kontextmenue darf Fusion nicht stoeren.
+            return
+
+
 def _get_or_create_panel(workspace):
     global _active_panel_id
 
@@ -67,6 +113,10 @@ def start():
     on_command_created = _CommandCreatedHandler()
     cmd_def.commandCreated.add(on_command_created)
     _handlers.append(on_command_created)
+
+    on_marking_menu = _MarkingMenuHandler()
+    ui.markingMenuDisplaying.add(on_marking_menu)
+    _handlers.append(on_marking_menu)
 
     workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
     if not workspace:
