@@ -9,6 +9,8 @@ Dieses Projekt arbeitet nach einem klaren Issue- und Pull-Request-Modell.
 - Zu jedem Issue gibt es genau einen Pull Request.
 - Ein PR soll nur ein fachlich zusammenhängendes Thema enthalten.
 - `main` wird nicht direkt bearbeitet, sondern nur über Pull Requests.
+- Als Review reicht in diesem Projekt ein sauber dokumentierter Codex-Review-Thread oder eine gleichwertige technische Selbstprüfung.
+- Ein zweites menschliches GitHub-Approval ist für dieses Solo-Setup nicht verpflichtend.
 
 ## Arbeitsablauf
 
@@ -28,6 +30,7 @@ Ein Issue gilt erst als fertig, wenn:
 - eine sinnvolle Prüfung oder ein Test vorhanden ist
 - der Pull Request referenziert und zusammengeführt wurde
 - das Issue abgeschlossen werden kann
+- die Prüfung nachvollziehbar dokumentiert ist, auch wenn sie nicht als formales GitHub-Approval einer zweiten Person vorliegt
 
 ## Branch-Namen
 
@@ -42,4 +45,3 @@ codex/issue-<nummer>-<kurzname>
 - Offene fachliche Fragen werden im Issue geklärt.
 - Entscheidungen werden im Issue dokumentiert, nicht nur im PR.
 - Wenn ein Issue komplex ist, bleiben Teilfragen trotzdem im selben Thread.
-

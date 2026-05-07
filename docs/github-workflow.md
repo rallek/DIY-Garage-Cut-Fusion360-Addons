@@ -10,10 +10,12 @@ Wir arbeiten nachvollziehbar, klein geschnitten und versionierbar.
 
 - Jedes Thema beginnt mit einem GitHub-Issue.
 - Jedes Issue hat genau einen eigenen Thread.
-- Jedes Issue bekommt genau einen Pull Request.
+- Jedes Issue bekommt genau einen eigenen Pull Request.
 - Ein Pull Request behandelt nur ein zusammenhängendes Thema.
 - `main` bleibt geschützt und wird nur per Pull Request geändert.
 - Diskussionen und Entscheidungen laufen zuerst im Issue, nicht verstreut in mehreren Stellen.
+- Ein zweites menschliches PR-Approval ist für dieses Solo-Projekt nicht verpflichtend.
+- Als Review gilt ein sauber dokumentierter Codex-Review-Thread oder eine gleichwertige technische Selbstprüfung.
 
 ## Issue-Struktur
 
@@ -74,4 +76,4 @@ Ein Issue ist erst erledigt, wenn:
 - eine technische Prüfung vorhanden ist
 - der PR gemerged wurde
 - das Issue geschlossen werden kann
-
+- die Prüfung nachvollziehbar dokumentiert ist, auch wenn sie nicht als formales GitHub-Approval einer zweiten Person vorliegt
