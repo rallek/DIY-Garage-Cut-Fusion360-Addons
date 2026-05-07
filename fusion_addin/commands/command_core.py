@@ -1,6 +1,7 @@
 import adsk.core
 
 import config
+from lib.attribute_helpers import get_attr, set_attr
 
 _handlers = []
 _active_panel_id = None
@@ -22,7 +23,56 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
         app = adsk.core.Application.get()
         ui = app.userInterface
-        ui.messageBox("DIY Garage Cut Add-in Grundgeruest laeuft.")
+
+        sels = ui.activeSelections
+        if not sels or sels.count < 1:
+            ui.messageBox("Bitte zuerst einen Koerper auswaehlen und den Befehl dann erneut starten.")
+            return
+
+        entity = sels.item(0).entity if sels.item(0) else None
+        if not entity or "BRepBody" not in (entity.objectType or ""):
+            ui.messageBox("Die erste Auswahl ist kein Koerper. Bitte einen Koerper auswaehlen.")
+            return
+
+        defaults = {
+            config.ATTR_KEY_MATERIAL_TYP: "MDF",
+            config.ATTR_KEY_KANTEN_INFO: "vorn_2mm;links_2mm",
+            config.ATTR_KEY_EXPORT_FLAG: "true",
+            config.ATTR_KEY_NOTIZ: "Testlauf Issue #3",
+        }
+        write_results = {}
+        kept_existing = []
+
+        for key, default_value in defaults.items():
+            existing_value = get_attr(entity, key, None)
+            if existing_value is None:
+                write_results[key] = set_attr(entity, key, default_value)
+            else:
+                kept_existing.append(key)
+                write_results[key] = True
+
+        material_typ = get_attr(entity, config.ATTR_KEY_MATERIAL_TYP, "-")
+        kanten_info = get_attr(entity, config.ATTR_KEY_KANTEN_INFO, "-")
+        export_flag = get_attr(entity, config.ATTR_KEY_EXPORT_FLAG, "-")
+        notiz = get_attr(entity, config.ATTR_KEY_NOTIZ, "-")
+
+        failed_writes = [key for key, ok in write_results.items() if not ok]
+        status_line = "Status: Werte geschrieben/gelesen."
+        if kept_existing:
+            status_line = "Status: Vorhandene Werte wurden beibehalten, fehlende ergaenzt."
+        if failed_writes:
+            failed_joined = ", ".join(failed_writes)
+            status_line = f"Status: Teilweise fehlgeschlagen (Schreiben): {failed_joined}"
+
+        ui.messageBox(
+            "Attribut-Testlauf:\n"
+            f"Namespace: {config.ATTRIBUTE_GROUP}\n"
+            f"{status_line}\n"
+            f"{config.ATTR_KEY_MATERIAL_TYP}: {material_typ}\n"
+            f"{config.ATTR_KEY_KANTEN_INFO}: {kanten_info}\n"
+            f"{config.ATTR_KEY_EXPORT_FLAG}: {export_flag}\n"
+            f"{config.ATTR_KEY_NOTIZ}: {notiz}"
+        )
 
 
 class _MarkingMenuHandler(adsk.core.MarkingMenuEventHandler):

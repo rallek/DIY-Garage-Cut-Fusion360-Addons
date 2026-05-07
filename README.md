@@ -147,3 +147,25 @@ Er erscheint in der normalen Konstruktionsoberflaeche:
 3. Sicherstellen, dass als lokaler Add-in-Ordner wirklich `fusion_addin` gewaehlt wurde (darin liegen `DIYGarageCutAddin.py` und `DIYGarageCutAddin.manifest`).
 4. In `Design > Volumenkorper` nachsehen, ob der Button rechts im `>>`-Ueberlaufmenue der Toolbar steckt.
 5. Falls weiterhin nichts erscheint: Add-in im Dialog stoppen und erneut starten.
+
+## Stand Issue #3: Datenmodell-Grundlage fuer Bauteil-Metadaten
+
+Was wurde gebaut:
+
+- Zentrale Attribut-Konstanten in `fusion_addin/config.py`:
+- Namespace/Attribut-Gruppe: `DIYGarageCut.part_metadata`
+- Keys: `material_typ`, `kanten_info`, `export_flag`, `notiz`
+- Kleine, defensive Helper in `fusion_addin/lib/attribute_helpers.py`:
+- `set_attr(entity, key, value)`
+- `get_attr(entity, key, default=None)`
+- `clear_attr(entity, key)`
+- Command-Testweg in `fusion_addin/commands/command_core.py`:
+- Bei selektiertem Koerper werden Testwerte geschrieben, wieder gelesen und in einer MessageBox angezeigt.
+
+So testest du es in Fusion 360:
+
+1. Add-in starten (wie oben beschrieben).
+2. Im Design-Workspace einen Volumenkoerper auswaehlen.
+3. Befehl `DIY Garage Cut` ausfuehren (Toolbar oder Kontextmenue).
+4. Erwartung: MessageBox zeigt Namespace und die vier gelesenen Testwerte.
+5. Ohne Koerper-Auswahl oder bei falscher Auswahl gibt es eine klare Hinweis-Meldung statt Absturz.
