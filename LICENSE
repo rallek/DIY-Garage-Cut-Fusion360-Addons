@@ -1,0 +1,66 @@
+DIY Garage Cut Community License v0.1 (Draft)
+
+Status: Draft (Arbeitsstand)
+Letzte Aktualisierung: 2026-04-19 13:55
+
+Wichtiger Hinweis:
+Dieser Entwurf ist keine Rechtsberatung. Vor finaler Veröffentlichung bitte rechtlich prüfen.
+
+1. Urheber und Projekt
+
+Dieses Projekt heißt `DIY Garage Cut`.
+Originalidee und Projektursprung: Ralf.
+
+Copyright (c) Ralf.
+Alle Rechte vorbehalten, soweit in dieser Lizenz nicht ausdrücklich gewährt.
+
+2. Erlaubte Nutzung
+
+Unter den Bedingungen dieser Lizenz ist erlaubt:
+1. Nutzung der Software für private, schulische und berufliche Zwecke.
+2. Nutzung der Software auch im kommerziellen Umfeld (z. B. intern im Betrieb).
+3. Ändern und Weiterentwickeln des Quellcodes.
+4. Weitergabe von Original- oder geänderten Versionen.
+
+3. Verpflichtende Bedingungen
+
+Bei jeder Weitergabe (Source oder Build) müssen folgende Punkte erfüllt sein:
+1. Diese Lizenz bleibt vollständig enthalten.
+2. Der Hinweis auf das Ursprungsprojekt bleibt erhalten:
+   - `DIY Garage Cut`
+   - Originalidee/Ursprung: Ralf
+3. Änderungen müssen kenntlich gemacht werden (z. B. in `CHANGELOG`, `README` oder Header-Hinweis).
+4. Der Ursprung darf nicht verschleiert werden.
+
+4. Nicht erlaubt ohne ausdrückliche schriftliche Zustimmung
+
+Folgendes ist verboten, sofern keine schriftliche Zustimmung von Ralf vorliegt:
+1. Verkauf der Software selbst (Original oder abgeleitete Version), inklusive Lizenzverkauf, Reselling, White-Label-Verkauf oder Bündelung mit primärem Verkaufszweck der Software.
+2. Rebranding als eigenes unabhängiges Produkt ohne klaren Herkunftshinweis auf `DIY Garage Cut` und Ralf.
+3. Entfernen oder Unterdrücken der Ursprungs-/Attributionshinweise.
+
+5. Gewährleistung und Haftung
+
+Die Software wird "wie besehen" bereitgestellt, ohne ausdrückliche oder stillschweigende Gewährleistung.
+Der Urheber haftet nicht für Schäden, soweit gesetzlich zulässig.
+
+6. Beendigung
+
+Bei Verstoß gegen diese Lizenz enden die eingeräumten Rechte automatisch.
+Rechte können nach Behebung des Verstoßes nur durch ausdrückliche Freigabe des Urhebers wiederaufleben.
+
+7. Ausnahmen / Sonderrechte
+
+Sondernutzungen (z. B. Verkauf, White-Label, OEM, gesonderte kommerzielle Verwertung) können individuell schriftlich vereinbart werden.
+
+Kontakt: durch Projektinhaber festzulegen.
+
+8. Drittkomponenten und Module
+
+1. Drittkomponenten (z. B. CSS-Frameworks) sind nur zulässig, wenn deren Lizenz mit dieser Projektlizenz und geplanter Nutzung vereinbar ist.
+2. Jede verwendete Drittkomponente muss mit Name, Version, Lizenz und Quelle in `docs/reference/THIRD_PARTY_LICENSES.md` dokumentiert werden.
+3. Module dürfen keine zusätzlichen Lizenzpflichten einführen, die den Betrieb oder die Weitergabe dieses Projekts blockieren.
+
+9. Migration in finale LICENSE
+
+Dieser Entwurf wird nach finaler Prüfung als endgültige `LICENSE` bestätigt oder ersetzt.
