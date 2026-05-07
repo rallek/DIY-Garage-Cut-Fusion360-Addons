@@ -4,6 +4,9 @@ import config
 
 _handlers = []
 _active_panel_id = None
+_is_started = False
+_command_created_handler = None
+_marking_menu_handler = None
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -97,7 +100,10 @@ def _get_or_create_panel(workspace):
 
 
 def start():
-    global _active_panel_id
+    global _active_panel_id, _is_started, _command_created_handler, _marking_menu_handler
+    if _is_started:
+        return
+
     app = adsk.core.Application.get()
     ui = app.userInterface
 
@@ -110,13 +116,14 @@ def start():
             "./Resources"
         )
 
-    on_command_created = _CommandCreatedHandler()
-    cmd_def.commandCreated.add(on_command_created)
-    _handlers.append(on_command_created)
+    _command_created_handler = _CommandCreatedHandler()
+    cmd_def.commandCreated.add(_command_created_handler)
+    _handlers.append(_command_created_handler)
 
-    on_marking_menu = _MarkingMenuHandler()
-    ui.markingMenuDisplaying.add(on_marking_menu)
-    _handlers.append(on_marking_menu)
+    _marking_menu_handler = _MarkingMenuHandler()
+    ui.markingMenuDisplaying.add(_marking_menu_handler)
+    _handlers.append(_marking_menu_handler)
+    _is_started = True
 
     workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
     if not workspace:
@@ -138,11 +145,25 @@ def start():
             # Manche Fusion-Versionen erlauben diese Flags nicht in allen Panels.
             pass
 
-
 def stop():
-    global _active_panel_id
+    global _active_panel_id, _is_started, _command_created_handler, _marking_menu_handler
     app = adsk.core.Application.get()
     ui = app.userInterface
+    cmd_def = ui.commandDefinitions.itemById(config.COMMAND_ID)
+
+    if _marking_menu_handler:
+        try:
+            ui.markingMenuDisplaying.remove(_marking_menu_handler)
+        except Exception:
+            pass
+        _marking_menu_handler = None
+
+    if cmd_def and _command_created_handler:
+        try:
+            cmd_def.commandCreated.remove(_command_created_handler)
+        except Exception:
+            pass
+        _command_created_handler = None
 
     workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
     if workspace:
@@ -168,9 +189,9 @@ def stop():
             if control:
                 control.deleteMe()
 
-    cmd_def = ui.commandDefinitions.itemById(config.COMMAND_ID)
     if cmd_def:
         cmd_def.deleteMe()
 
     _handlers.clear()
     _active_panel_id = None
+    _is_started = False
