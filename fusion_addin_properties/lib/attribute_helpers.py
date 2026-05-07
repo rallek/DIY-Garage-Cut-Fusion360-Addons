@@ -1,4 +1,4 @@
-import config
+import properties_config as config
 
 
 def _resolve_entity_for_attributes(entity):

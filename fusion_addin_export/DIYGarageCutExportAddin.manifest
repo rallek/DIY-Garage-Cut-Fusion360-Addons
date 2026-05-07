@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "addin",
+  "id": "de.diygaragecut.fusion.addin.export",
+  "author": "DIY Garage Cut",
+  "description": {
+    "": "CSV-Export Add-in fuer DIY Garage Cut."
+  },
+  "version": "0.2.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}
