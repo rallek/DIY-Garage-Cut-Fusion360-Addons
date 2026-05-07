@@ -4,7 +4,7 @@ Dieses Dokument sammelt die projektrelevanten Inhalte in komprimierter Form, dam
 
 ## Einordnung
 
-Dieses Repository ist ein Unterrepo von `DIY Garage Cut`.
+Dieses Repository heißt `DIY Garage Cut Fusion360 Addons` und ist ein Unterrepo von `DIY Garage Cut`.
 
 Es enthält die Fusion-360-bezogenen Bausteine für:
 
@@ -52,4 +52,3 @@ Die eigentliche Zuschnitt- und Produktionslogik bleibt bewusst außerhalb von Fu
 
 Dieses Repo liefert die Fusion-360-Seite zum Hauptprojekt `DIY Garage Cut`.
 Änderungen hier sollten immer auf ein Ziel im Hauptprojekt oder auf eine klar abgegrenzte technische Aufgabe zurückführbar sein.
-

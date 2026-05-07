@@ -1,5 +1,5 @@
 
-# Fusion Furniture Tools
+# DIY Garage Cut Fusion360 Addons
 
 Dieses Repository ist ein Unterrepo von `DIY Garage Cut` und enthält die Fusion-360-Inhalte, mit denen das Hauptprojekt um CAD-nahe Fertigungsdaten erweitert wird.
 
@@ -77,7 +77,7 @@ Zusätzliche Metadaten:
 ## Projektstruktur
 
 ```text
-fusion-furniture-tools/
+DIY-Garage-Cut-Fusion360-Addons/
 │
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
