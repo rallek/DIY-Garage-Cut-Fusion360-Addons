@@ -6,6 +6,8 @@ import re
 import export_config as config
 from shared.catalog import get_csv_fields, load_catalog
 
+_ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
+
 _handlers = []
 _active_panel_id = None
 _is_started = False
@@ -109,7 +111,7 @@ def _append_component_bodies(component, rows, seen_tokens, catalog):
         for body in component.bRepBodies:
             _append_body_row_if_visible(body, rows, seen_tokens, catalog)
     except Exception as exc:
-        print(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}")
+        raise RuntimeError(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
 def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog):
@@ -122,9 +124,9 @@ def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog)
                     _append_body_row_if_visible(body, rows, seen_tokens, catalog)
                 _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens, catalog)
             except Exception as exc:
-                print(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}")
+                raise RuntimeError(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}") from exc
     except Exception as exc:
-        print(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}")
+        raise RuntimeError(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}") from exc
 
 
 def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
@@ -139,16 +141,18 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
         seen_tokens.add(token)
         rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
-        print(f"CSV-Export: Body uebersprungen: {exc}")
+        body_name = _safe_body_name(body)
+        raise RuntimeError(f"CSV-Export: Body '{body_name}' konnte nicht exportiert werden: {exc}") from exc
 
 
 def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
     width, height, depth = _get_dimensions_from_bounding_box(body)
+    material_id, material_type = _resolve_catalog_material_ref(body, catalog)
     material_name = _safe_name(getattr(body, "material", None))
     appearance_name = _safe_name(getattr(body, "appearance", None))
     attr_text = _collect_attributes_as_text(body, catalog)
-    return [name, width, height, depth, material_name, appearance_name, attr_text]
+    return [name, width, height, depth, material_id, material_type, material_name, appearance_name, attr_text]
 
 
 def _safe_body_name(body):
@@ -199,8 +203,7 @@ def _collect_attributes_as_text(body, catalog):
             entries.append(f"{group}:{name}={value}")
         entries.extend(_collect_catalog_csv_entries(attrs, catalog))
     except Exception as exc:
-        print(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}")
-        return "-"
+        raise RuntimeError(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}") from exc
     return ";".join(entries) if entries else "-"
 
 
@@ -228,8 +231,10 @@ def _collect_body_attributes(body):
 def _collect_catalog_csv_entries(attributes, catalog):
     if not catalog:
         return []
-    material_id = _resolve_catalog_material_id(attributes)
+    material_id, source = _resolve_catalog_material_id(attributes)
     if not material_id:
+        return []
+    if source == "material_typ":
         return []
     item = catalog.get(material_id)
     if not item:
@@ -254,16 +259,66 @@ def _collect_catalog_csv_entries(attributes, catalog):
     return entries
 
 
+def _resolve_catalog_material_ref(body, catalog):
+    if not catalog:
+        raise ValueError("Catalog nicht geladen.")
+    body_name = _safe_body_name(body)
+    attributes = _collect_body_attributes(body)
+    material_id, source = _resolve_catalog_material_id(attributes)
+    if not material_id:
+        raise ValueError(
+            f"Body '{body_name}' hat keine 'material_id' im Attribut-Set "
+            f"('{_ATTRIBUTE_GROUP}:material_id')."
+        )
+    if source == "material_typ":
+        raise ValueError(
+            f"Body '{body_name}' verwendet Legacy-Key 'material_typ' ohne kanonische 'material_id'. "
+            "Bitte Daten auf 'material_id' migrieren."
+        )
+    item = catalog.get(material_id)
+    if not item:
+        raise ValueError(
+            f"Body '{body_name}' referenziert material_id '{material_id}', "
+            "die nicht in catalog.json existiert."
+        )
+    return item.id, item.type
+
+
 def _resolve_catalog_material_id(attributes):
-    preferred_keys = ("material_id", "material_typ")
+    # Migration contract: material_id is canonical, material_typ is legacy fallback.
+    key_priority = ("material_id", "material_typ")
+    key_buckets = {key: [] for key in key_priority}
     for group, key, value in attributes:
-        if key in preferred_keys and value not in (None, "", "-"):
-            return str(value).strip()
-    return None
+        if key not in key_buckets:
+            continue
+        value_text = str(value).strip() if value is not None else ""
+        if value_text in ("", "-"):
+            continue
+        key_buckets[key].append((str(group or "").strip(), value_text))
+
+    for key in key_priority:
+        entries = key_buckets.get(key, [])
+        if not entries:
+            continue
+        for group, value in entries:
+            if group == "DIYGarageCut.part_metadata":
+                return value, key
+        return entries[0][1], key
+    return None, None
 
 
 def _write_csv(path, rows):
-    header = ["body_name", "width_mm", "height_mm", "depth_mm", "material", "appearance", "attributes"]
+    header = [
+        "body_name",
+        "width_mm",
+        "height_mm",
+        "depth_mm",
+        "material_id",
+        "material_type",
+        "material",
+        "appearance",
+        "attributes",
+    ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(header)
@@ -318,8 +373,7 @@ def _try_load_catalog():
     try:
         return load_catalog()
     except Exception as exc:
-        print(f"CSV-Export: Catalog konnte nicht geladen werden: {exc}")
-        return None
+        raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
 
 
 def _get_document_length_unit():
