@@ -72,7 +72,6 @@ _STRINGS = {
         "filter_type": "Filter",
         "filter_all_types": "Alle Typen",
         "existing_entries": "Material",
-        "section_edit": "Bearbeiten",
         "create_new": "(Neu anlegen)",
         "copy_entry": "Als neuen Eintrag speichern",
         "delete_entry": "Eintrag löschen",
@@ -101,7 +100,6 @@ _STRINGS = {
         "filter_type": "Filter",
         "filter_all_types": "All types",
         "existing_entries": "Material",
-        "section_edit": "Edit",
         "create_new": "(Create new)",
         "copy_entry": "Save as new entry",
         "delete_entry": "Delete entry",
@@ -179,7 +177,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         _try_set_full_width(selection)
         selection.listItems.add(_t("create_new"), True)
 
-        _add_section_header(inputs, _t("section_edit"))
+        _add_section_divider(inputs)
 
         _add_field_label(inputs, _t("type"))
         type_input = inputs.addDropDownCommandInput(
@@ -222,7 +220,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
         copy_btn.isFullWidth = False
 
-        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, _t("delete_entry"), False, "", False)
+        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, _t("delete_entry"), True, "", False)
         delete_btn.isFullWidth = False
         delete_btn.isEnabled = False
 
@@ -1169,12 +1167,16 @@ def _add_field_label(inputs, text):
     return lbl
 
 
-def _add_section_header(inputs, text):
-    html = f"<div style='margin-top:6px;padding-top:4px;border-top:1px solid #b9b9b9;font-weight:600'>{_escape_html(text)}</div>"
-    header_id = f"diygc_section_{_slugify(text)}_{_label_counter}"
-    box = inputs.addTextBoxCommandInput(header_id, "", html, 1, True)
-    box.isFullWidth = True
-    return box
+def _add_section_divider(inputs):
+    divider_id = f"diygc_sep_{_label_counter}"
+    try:
+        sep = inputs.addSeparatorCommandInput(divider_id, "")
+        sep.isFullWidth = True
+        return sep
+    except Exception:
+        box = inputs.addTextBoxCommandInput(divider_id, "", "------------------------------", 1, True)
+        box.isFullWidth = True
+        return box
 
 
 def _try_set_full_width(input_obj):
