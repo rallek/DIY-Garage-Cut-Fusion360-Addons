@@ -1,85 +1,93 @@
-
 # Architektur
 
-## Grundprinzip
+Stand: 2026-05-17 18:45 UTC
 
-Fusion 360 dient ausschließlich als:
-- CAD-System
-- Geometriequelle
-- Metadatenträger
+## Prinzip
 
-Die eigentliche Produktionslogik liegt außerhalb von Fusion.
+Fusion 360:
+- CAD
+- Metadaten
 
----
-
-# Komponenten
-
-## 1. Fusion Add-in
-
-Verantwortlich für:
-- UI
-- Attributverwaltung
-- Benutzerinteraktion
-
-## 2. Exportskript
-
-Verantwortlich für:
-- Geometrieanalyse
-- CSV-Erzeugung
-- Datennormalisierung
-
-## 3. Externe Zuschnittsoftware
-
-Verantwortlich für:
+DIY Garage Cut:
 - Optimierung
-- Kalkulation
-- Materialverbrauch
-- Produktionsplanung
+- Rohmaße
+- Produktion
+
+Fusion berechnet keinen Zuschnitt.
 
 ---
 
-# Datenfluss
+# Addins
+
+## DIYGarageCutExportAddin
+
+Verantwortlich für:
+- CSV-Export
+- Validierung
+- Analyse
+- Katalogverwaltung
 
 ```text
-Fusion 360
-    ↓
-Add-in / Export
-    ↓
-CSV
-    ↓
-Zuschnittsoftware
+fusion_addin_export/
+├── commands/
+│   ├── export/
+│   ├── validate/
+│   └── catalog/
+```
+
+## DIYGarageCutPropertiesAddin
+
+Verantwortlich für:
+- Material
+- Kanten
+- Fräszulage
+- Hinweise
+
+```text
+fusion_addin_properties/
+├── commands/
+│   └── part_properties/
 ```
 
 ---
 
-# Erweiterbarkeit
+# Shared
 
-Spätere Erweiterungen:
-- CNC-Informationen
-- Bohrbilder
-- Gruppierungslogik
-- Fertigungsreihenfolgen
-- Stücklisten
-- ERP-Anbindung
+```text
+shared/
+├── catalog/
+├── attributes/
+├── csv_export/
+└── fusion_helpers/
+```
 
 ---
 
-# Designprinzipien
+# Katalog
 
-## Einfachheit vor Automatisierung
+```text
+catalog.json
+```
 
-Der Workflow soll:
-- robust
-- nachvollziehbar
-- wartbar
-sein.
+Typen:
+- sheet
+- bar
+- edge
+- profile
+- hardware
+- consumable
 
-Keine komplexe automatische Geometrieerkennung in V1.
+---
 
-## Sichtbare Metadaten
+# Export
 
-Kanten und Oberflächen sollen visuell erkennbar sein.
+CSV enthält nur:
+- Maße
+- Material
+- Kanten
+- Hinweise
 
-## Lose Kopplung
-
-CSV bleibt die zentrale Austauschschicht.
+Keine:
+- Optimierung
+- Rohmaßberechnung
+- QR-Logik

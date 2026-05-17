@@ -1,90 +1,93 @@
-
 # Datenmodell
 
-## Grundstruktur
+Stand: 2026-05-17 18:45 UTC
 
-Das System verwendet drei Informationsebenen:
+# catalog.json
 
-| Ebene | Zweck |
-|---|---|
-| Physical Material | technischer Werkstoff |
-| Appearance | Oberflächen- und Fertigungsinformationen |
-| Attributes | Zusatzinformationen |
+## Typen
+
+```text
+sheet
+bar
+edge
+profile
+hardware
+consumable
+```
+
+## Basisfelder
+
+```json
+{
+  "id": "",
+  "type": "",
+  "name": "",
+  "appearance": ""
+}
+```
+
+## sheet
+
+```json
+{
+  "thickness_mm": 19,
+  "default_trim_allowance_mm": 2
+}
+```
+
+## edge
+
+```json
+{
+  "thickness_mm": 2
+}
+```
 
 ---
 
-# Physical Material
+# Body-Attribute
 
-## Beispiele
+Namespace:
 
-- MDF
-- Multiplex
-- Spanplatte
-- Birke Multiplex
-- KVH
+```text
+DGC.part_metadata
+```
 
-Diese Daten stammen direkt aus Fusion 360.
+## Felder
+
+```text
+material_id
+trim_allowance_mm
+
+front_reference
+
+edge_front
+edge_back
+edge_left
+edge_right
+
+notes
+
+exclude_from_export
+```
+
+---
+
+# front_reference
+
+Werte:
+
+```text
+long_side
+short_side
+```
+
+`Richtung tauschen` ist nur UI-Logik.
+Kein zusätzliches CSV-Feld.
 
 ---
 
 # Appearance
 
-## Kanten
-
-| Appearance | Bedeutung |
-|---|---|
-| EDGE_ABS_1 | ABS 1 mm |
-| EDGE_ABS_2 | ABS 2 mm |
-| EDGE_WOOD | Massivholzkante |
-
-## Furnier
-
-| Appearance | Bedeutung |
-|---|---|
-| VENEER_OAK | Eiche furniert |
-| VENEER_WALNUT | Nussbaum furniert |
-
-## Beschichtung
-
-| Appearance | Bedeutung |
-|---|---|
-| HPL_WHITE | HPL weiß |
-| PAINT_BLACK | Lack schwarz |
-
----
-
-# Attributes
-
-Attribute-Gruppe:
-
-```text
-com.furniture.cutlist
-```
-
-## Attribute-Felder
-
-| Key | Typ | Beschreibung |
-|---|---|---|
-| schema_version | string | Datenmodellversion |
-| grain | string | Maserungsrichtung |
-| note | string | Freitext |
-| orientation_override | string | optionale Achsüberschreibung |
-
-## grain
-
-Mögliche Werte:
-
-```text
-none
-length
-width
-```
-
-## orientation_override
-
-Mögliche Werte:
-
-```text
-auto
-swap_length_width
-```
+Nur Visualisierung.
+Nie führende Datenquelle.
