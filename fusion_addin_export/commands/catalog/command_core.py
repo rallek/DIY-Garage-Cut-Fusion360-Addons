@@ -688,12 +688,15 @@ def _estimate_tint_alpha(appearance, tint_rgb):
 
     explicit = _extract_tint_amount(appearance)
     if explicit is not None:
-        return _clamp(0.0, 1.0, explicit)
+        # Fusion wirkt bei Holztoenung deutlich staerker als ein linearer Alpha-Wert.
+        # Nichtlineare Abbildung: 0.30 -> ~0.85
+        mapped = 1.0 - ((1.0 - _clamp(0.0, 1.0, explicit)) ** 5)
+        return _clamp(0.25, 0.95, mapped)
 
     r, g, b = [channel / 255.0 for channel in tint_rgb]
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    alpha = 0.35 + (0.55 * s) + (0.15 * (1.0 - v))
-    return _clamp(0.20, 0.95, alpha)
+    alpha = 0.50 + (0.40 * s) + (0.20 * (1.0 - v))
+    return _clamp(0.35, 0.95, alpha)
 
 
 def _is_tint_enabled(appearance):
@@ -843,7 +846,7 @@ def _build_preview_html_url(image_path, title, tint_rgb=None, tint_alpha=None):
       display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
     }}
     img {{ width: 100%; height: 100%; object-fit: cover; }}
-    .tint {{ position: absolute; inset: 0; mix-blend-mode: color; pointer-events: none; }}
+    .tint {{ position: absolute; inset: 0; mix-blend-mode: normal; pointer-events: none; }}
     .cap {{ margin-top: 6px; color: #444; font-size: 11px; }}
   </style>
 </head>
