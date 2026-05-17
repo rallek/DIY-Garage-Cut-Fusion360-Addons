@@ -1,4 +1,5 @@
 import os
+import pathlib
 import re
 import struct
 import tempfile
@@ -35,6 +36,9 @@ _APPEARANCE_NONE_LABEL = "(Bitte waehlen)"
 _PREVIEW_SIZE = 84
 _preview_cache_dir = os.path.abspath(
     os.path.join(tempfile.gettempdir(), "diygc_catalog_preview_cache")
+)
+_preview_html_dir = os.path.abspath(
+    os.path.join(tempfile.gettempdir(), "diygc_catalog_preview_html")
 )
 _preview_config_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "catalog_preview_config.json")
@@ -82,8 +86,13 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         appearance_pick.listItems.add(_APPEARANCE_NONE_LABEL, True)
 
-        preview_file = _ensure_preview_png("none", (160, 160, 160))
-        preview = inputs.addImageCommandInput(_INPUT_APPEARANCE_PREVIEW, "Vorschau", preview_file)
+        preview = inputs.addBrowserCommandInput(
+            _INPUT_APPEARANCE_PREVIEW,
+            "Vorschau",
+            _build_preview_html_url(_ensure_preview_png("none", (160, 160, 160)), "Keine Auswahl"),
+            170,
+            230,
+        )
         preview.isFullWidth = True
         preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
         preview_hint.isFullWidth = True
@@ -358,26 +367,26 @@ def _collect_appearance_names():
 
 
 def _refresh_appearance_preview(inputs):
-    image_input = adsk.core.ImageCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PREVIEW))
-    if not image_input:
+    browser_input = adsk.core.BrowserCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PREVIEW))
+    if not browser_input:
         return
 
     try:
         appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
         if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
-            _set_preview_image_safe(
-                inputs,
-                image_input,
+            _set_preview_hint(inputs, "")
+            browser_input.htmlFileURL = _build_preview_html_url(
                 _ensure_preview_png("none", (160, 160, 160)),
-                "",
+                "Keine Auswahl",
             )
             return
 
         appearance = _find_appearance_by_name(appearance_name)
         texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
-        if texture_file and texture_file.lower().endswith(".png"):
-            if _set_preview_image_safe(inputs, image_input, texture_file, "Vorschau: Texture-Bild"):
-                return
+        if texture_file and os.path.exists(texture_file):
+            _set_preview_hint(inputs, "Vorschau: Texture-Bild")
+            browser_input.htmlFileURL = _build_preview_html_url(texture_file, appearance_name)
+            return
 
         color = _extract_color_from_appearance(appearance) if appearance else None
         if color is None:
@@ -386,27 +395,18 @@ def _refresh_appearance_preview(inputs):
             hint = "Hinweis: Texture nicht als PNG verfuegbar (Farb-Fallback)."
         else:
             hint = "Vorschau: Farb-Fallback"
-        _set_preview_image_safe(
-            inputs,
-            image_input,
+        _set_preview_hint(inputs, hint)
+        browser_input.htmlFileURL = _build_preview_html_url(
             _ensure_preview_png(_slugify(appearance_name), color),
-            hint,
+            appearance_name,
         )
     except Exception as exc:
         fallback = _ensure_preview_png("preview_error", (160, 160, 160))
-        _set_preview_image_safe(inputs, image_input, fallback, f"Hinweis: Vorschaufehler ({exc})")
-
-
-def _set_preview_image_safe(inputs, image_input, path, hint):
-    try:
-        if not path or not os.path.exists(path):
-            return False
-        image_input.imageFile = path
-        _set_preview_hint(inputs, hint)
-        return True
-    except Exception as exc:
-        _set_preview_hint(inputs, f"Hinweis: Preview konnte nicht gesetzt werden ({exc})")
-        return False
+        _set_preview_hint(inputs, f"Hinweis: Vorschaufehler ({exc})")
+        try:
+            browser_input.htmlFileURL = _build_preview_html_url(fallback, "Preview-Fehler")
+        except Exception:
+            pass
 
 
 def _appearance_has_texture(appearance):
@@ -632,6 +632,48 @@ def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
+
+
+def _build_preview_html_url(image_path, title):
+    os.makedirs(_preview_html_dir, exist_ok=True)
+    img_uri = pathlib.Path(image_path).as_uri() if image_path and os.path.exists(image_path) else ""
+    safe_title = _escape_html(title or "")
+    html = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {{ margin: 0; padding: 8px; background: #f3f3f3; font-family: Arial, sans-serif; }}
+    .box {{
+      width: 120px; height: 120px; border: 1px solid #bbb; background: #ddd;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }}
+    img {{ width: 100%; height: 100%; object-fit: cover; }}
+    .cap {{ margin-top: 6px; color: #444; font-size: 11px; }}
+  </style>
+</head>
+<body>
+  <div class="box">{"<img src='" + img_uri + "' alt='preview' />" if img_uri else ""}</div>
+  <div class="cap">{safe_title}</div>
+</body>
+</html>
+"""
+    token = _slugify(title or "preview")
+    html_path = os.path.join(_preview_html_dir, f"preview_{token}.html")
+    with open(html_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(html)
+    return pathlib.Path(html_path).as_uri()
+
+
+def _escape_html(text):
+    text = str(text or "")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
 
 
 def _build_appearance_metadata(appearance_name, appearance_obj):
