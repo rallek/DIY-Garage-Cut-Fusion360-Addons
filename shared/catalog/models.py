@@ -1,14 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
-CATALOG_TYPES = frozenset({
-    "sheet",
-    "bar",
-    "edge",
-    "profile",
-    "hardware",
-    "consumable",
-})
+from .type_config import get_catalog_types, normalize_type_properties
+
+CATALOG_TYPES = frozenset(get_catalog_types())
 
 
 @dataclass(frozen=True)
@@ -27,11 +22,12 @@ class CatalogItem:
             raise ValueError(f"Catalog item missing required fields: {', '.join(missing)}")
 
         item_type = str(data["type"]).strip()
-        if item_type not in CATALOG_TYPES:
+        if item_type not in get_catalog_types():
             raise ValueError(f"Unsupported catalog type: {item_type}")
 
         base_fields = {"id", "type", "name", "appearance"}
         extra = {k: v for k, v in data.items() if k not in base_fields}
+        extra = normalize_type_properties(item_type, extra)
         return cls(
             id=str(data["id"]).strip(),
             type=item_type,
@@ -63,4 +59,3 @@ class Catalog:
 
     def get(self, item_id: str) -> Optional[CatalogItem]:
         return self._index.get((item_id or "").strip())
-
