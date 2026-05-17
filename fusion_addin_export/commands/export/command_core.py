@@ -255,10 +255,25 @@ def _collect_catalog_csv_entries(attributes, catalog):
 
 
 def _resolve_catalog_material_id(attributes):
-    preferred_keys = ("material_id", "material_typ")
+    # Migration contract: material_id is canonical, material_typ is legacy fallback.
+    key_priority = ("material_id", "material_typ")
+    key_buckets = {key: [] for key in key_priority}
     for group, key, value in attributes:
-        if key in preferred_keys and value not in (None, "", "-"):
-            return str(value).strip()
+        if key not in key_buckets:
+            continue
+        value_text = str(value).strip() if value is not None else ""
+        if value_text in ("", "-"):
+            continue
+        key_buckets[key].append((str(group or "").strip(), value_text))
+
+    for key in key_priority:
+        entries = key_buckets.get(key, [])
+        if not entries:
+            continue
+        for group, value in entries:
+            if group == "DIYGarageCut.part_metadata":
+                return value
+        return entries[0][1]
     return None
 
 
