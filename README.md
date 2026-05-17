@@ -192,3 +192,25 @@ So verwendest du den Export:
 3. Button `DIY Garage Cut` ausfuehren.
 4. Speicherort und Dateiname im Dialog waehlen.
 5. Erwartung: CSV-Datei wird gespeichert und eine Erfolgsmeldung mit Anzahl exportierter Bodies erscheint.
+
+## Catalog-Preview Konfiguration (Issue #22)
+
+Fuer die Appearance-Vorschau im Catalog-Dialog werden Texture-Dateien gesucht.
+
+Konfigurationsdatei:
+
+- `catalog_preview_config.json`
+
+Aktuell relevante Einstellung:
+
+- `material_texture_roots`: Liste von Basisordnern, in denen Texturen gesucht werden.
+
+Standardwert:
+
+- `%LOCALAPPDATA%\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats`
+
+Hinweise:
+
+- Umgebungsvariablen wie `%LOCALAPPDATA%` werden automatisch aufgeloest.
+- Der Pfad ist pro Benutzer/Installation unterschiedlich und deshalb konfigurierbar.
+- Beim Speichern eines Catalog-Eintrags versucht das Add-in, Texture-Pfade automatisch aus der gewaehlten Fusion-Appearance mitzunehmen (`preview_texture`, `appearance_texture_color`, usw.).
