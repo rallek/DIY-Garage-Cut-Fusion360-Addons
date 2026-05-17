@@ -160,15 +160,6 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         _try_set_full_width(selection)
         selection.listItems.add(_t("create_new"), True)
 
-        _add_field_label(inputs, _t("copy_entry"))
-        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
-        copy_btn.isFullWidth = False
-
-        _add_field_label(inputs, _t("delete_entry"))
-        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, "", False, "", False)
-        delete_btn.isFullWidth = False
-        delete_btn.isEnabled = False
-
         _add_field_label(inputs, _t("type"))
         type_input = inputs.addDropDownCommandInput(
             _INPUT_TYPE,
@@ -203,6 +194,15 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
         preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
         preview_hint.isFullWidth = True
+
+        _add_field_label(inputs, _t("copy_entry"))
+        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
+        copy_btn.isFullWidth = False
+
+        _add_field_label(inputs, _t("delete_entry"))
+        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, "", False, "", False)
+        delete_btn.isFullWidth = False
+        delete_btn.isEnabled = False
 
         status = inputs.addTextBoxCommandInput(_INPUT_STATUS, "", "", 2, True)
         status.isFullWidth = True
