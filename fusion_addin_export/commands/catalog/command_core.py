@@ -1,6 +1,8 @@
 import os
 import re
 import struct
+import tempfile
+import urllib.parse
 import zlib
 
 import adsk.core
@@ -23,6 +25,7 @@ _INPUT_TYPE = "diygc_catalog_type"
 _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
 _INPUT_APPEARANCE_PREVIEW = "diygc_catalog_appearance_preview"
+_INPUT_PREVIEW_HINT = "diygc_catalog_preview_hint"
 _INPUT_SAVE = "diygc_catalog_save"
 _INPUT_STATUS = "diygc_catalog_status"
 _INPUT_LIST = "diygc_catalog_list"
@@ -30,7 +33,7 @@ _INPUT_LIST = "diygc_catalog_list"
 _APPEARANCE_NONE_LABEL = "(Bitte waehlen)"
 _PREVIEW_SIZE = 84
 _preview_cache_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "Resources", "_generated")
+    os.path.join(tempfile.gettempdir(), "diygc_catalog_preview_cache")
 )
 
 
@@ -76,6 +79,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         preview_file = _ensure_preview_png("none", (160, 160, 160))
         preview = inputs.addImageCommandInput(_INPUT_APPEARANCE_PREVIEW, "Vorschau", preview_file)
         preview.isFullWidth = True
+        preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
+        preview_hint.isFullWidth = True
 
         inputs.addBoolValueInput(_INPUT_SAVE, "Speichern", False, "", False)
         status = inputs.addTextBoxCommandInput(_INPUT_STATUS, "", "", 2, True)
@@ -340,15 +345,34 @@ def _refresh_appearance_preview(inputs):
     appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
     if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
         image_input.imageFile = _ensure_preview_png("none", (160, 160, 160))
+        _set_preview_hint(inputs, "")
         return
 
-    color = _find_color_for_appearance(appearance_name)
+    appearance = _find_appearance_by_name(appearance_name)
+    texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
+    if texture_file:
+        image_input.imageFile = texture_file
+        _set_preview_hint(inputs, "Vorschau: Texture-Bild")
+        return
+
+    color = _extract_color_from_appearance(appearance) if appearance else None
     if color is None:
         color = (110, 130, 170)
+    if appearance and _appearance_has_texture(appearance):
+        _set_preview_hint(inputs, "Hinweis: Texture vorhanden, aber API-Pfad nicht lesbar (Farb-Fallback).")
+    else:
+        _set_preview_hint(inputs, "Vorschau: Farb-Fallback")
     image_input.imageFile = _ensure_preview_png(_slugify(appearance_name), color)
 
 
-def _find_color_for_appearance(appearance_name):
+def _appearance_has_texture(appearance):
+    try:
+        return bool(getattr(appearance, "hasTexture", False))
+    except Exception:
+        return False
+
+
+def _find_appearance_by_name(appearance_name):
     wanted = (appearance_name or "").strip().lower()
     if not wanted:
         return None
@@ -367,14 +391,14 @@ def _find_color_for_appearance(appearance_name):
                 name = (entry.name or "").strip().lower()
                 if name != wanted:
                     continue
-                return _extract_color_from_appearance(entry)
+                return entry
         except Exception:
             return None
         return None
 
-    color = _scan_appearances(getattr(design, "appearances", None) if design else None)
-    if color is not None:
-        return color
+    appearance = _scan_appearances(getattr(design, "appearances", None) if design else None)
+    if appearance is not None:
+        return appearance
 
     if app:
         try:
@@ -384,11 +408,113 @@ def _find_color_for_appearance(appearance_name):
                 library = libs.item(li)
                 if not library:
                     continue
-                color = _scan_appearances(getattr(library, "appearances", None))
-                if color is not None:
-                    return color
+                appearance = _scan_appearances(getattr(library, "appearances", None))
+                if appearance is not None:
+                    return appearance
         except Exception:
             return None
+    return None
+
+
+def _find_texture_file_for_appearance(appearance):
+    if not appearance:
+        return None
+
+    seen = set()
+    for texture in _iter_appearance_textures(appearance):
+        marker = id(texture)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        path = _extract_texture_file_path(texture)
+        if path:
+            return path
+    return None
+
+
+def _iter_appearance_textures(appearance):
+    textures = []
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+
+            connected_texture = getattr(prop, "connectedTexture", None)
+            if connected_texture:
+                textures.append(connected_texture)
+
+            obj_type = getattr(prop, "objectType", "") or ""
+            if "AppearanceTextureProperty" in obj_type:
+                value = getattr(prop, "value", None)
+                if value:
+                    textures.append(value)
+    except Exception:
+        return []
+    return textures
+
+
+def _extract_texture_file_path(texture):
+    if not texture:
+        return None
+
+    try:
+        props = getattr(texture, "properties", None)
+        if props:
+            by_id = props.itemById("unifiedbitmap_Bitmap")
+            if by_id:
+                path = _resolve_image_path_candidate(getattr(by_id, "value", None))
+                if path:
+                    return path
+
+            for i in range(props.count):
+                prop = props.item(i)
+                if not prop:
+                    continue
+                path = _resolve_image_path_candidate(getattr(prop, "value", None))
+                if path:
+                    return path
+    except Exception:
+        pass
+
+    for attr_name in ("imageFile", "fileName", "filename", "path", "texturePath"):
+        try:
+            path = _resolve_image_path_candidate(getattr(texture, attr_name, None))
+            if path:
+                return path
+        except Exception:
+            continue
+    return None
+
+
+def _resolve_image_path_candidate(value):
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    raw_lower = raw.lower()
+    if raw_lower.startswith("file://"):
+        parsed = urllib.parse.urlparse(raw)
+        candidate = urllib.parse.unquote(parsed.path or "")
+        if candidate.startswith("/") and len(candidate) > 2 and candidate[2] == ":":
+            candidate = candidate[1:]
+        candidate = candidate.replace("/", "\\")
+        if os.path.exists(candidate):
+            return candidate
+
+    direct = raw.replace("/", "\\")
+    if os.path.exists(direct):
+        return direct
+
+    match = re.search(r"([A-Za-z]:[\\/][^|;]+?\.(?:png|jpg|jpeg|bmp|tif|tiff))", raw, re.IGNORECASE)
+    if match:
+        candidate = match.group(1).replace("/", "\\")
+        if os.path.exists(candidate):
+            return candidate
     return None
 
 
@@ -414,6 +540,12 @@ def _extract_color_from_appearance(appearance):
     except Exception:
         return None
     return None
+
+
+def _set_preview_hint(inputs, message):
+    hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
+    if hint:
+        hint.text = message or ""
 
 
 def _ensure_preview_png(token, rgb):
