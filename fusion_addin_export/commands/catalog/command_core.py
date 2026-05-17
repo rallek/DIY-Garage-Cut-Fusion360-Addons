@@ -986,27 +986,18 @@ def _add_type_specific_field_inputs(inputs):
             ctrl = None
             if kind == "number":
                 unit = str(field.get("storage_unit", "") or "")
-                quantity = str(field.get("quantity", "") or "").strip().lower()
                 min_value = float(field.get("min", 0.0))
                 max_value = float(field.get("max", 0.0))
                 step_value = float(field.get("step", 0.1))
                 default_value = float(field.get("default", 0.0))
-                if quantity == "length" and unit:
-                    min_db = _to_internal_value(min_value, unit)
-                    max_db = _to_internal_value(max_value, unit)
-                    default_db = _to_internal_value(default_value, unit)
-                else:
-                    min_db = min_value
-                    max_db = max_value
-                    default_db = default_value
                 ctrl = inputs.addFloatSpinnerCommandInput(
                     input_id,
                     "",
                     unit,
-                    min_db,
-                    max_db,
+                    min_value,
+                    max_value,
                     step_value,
-                    default_db,
+                    default_value,
                 )
             elif kind == "string":
                 ctrl = inputs.addStringValueInput(input_id, "", str(field.get("default", "")))
@@ -1069,11 +1060,9 @@ def _read_type_specific_values(inputs, type_id):
             spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
             if not spinner:
                 continue
-            value = float(spinner.value)
-            unit = str(field.get("storage_unit", "") or "")
-            quantity = str(field.get("quantity", "") or "").strip().lower()
-            if quantity == "length" and unit:
-                value = _from_internal_value(value, unit)
+            if not spinner.isValidExpression:
+                raise ValueError(f"Ungültige Eingabe für '{key}'.")
+            value = _parse_number_from_expression(spinner.expression)
             values[key] = value
             continue
         if kind == "string":
@@ -1113,10 +1102,7 @@ def _set_type_specific_form_values(inputs, type_id, properties):
             except Exception:
                 numeric = float(field.get("default", 0.0))
             unit = str(field.get("storage_unit", "") or "")
-            quantity = str(field.get("quantity", "") or "").strip().lower()
-            if quantity == "length" and unit:
-                numeric = _to_internal_value(numeric, unit)
-            spinner.value = numeric
+            spinner.expression = _build_numeric_expression(numeric, unit)
             continue
         if kind == "string":
             item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
@@ -1485,32 +1471,28 @@ def _clamp(min_value, max_value, value):
     return max(min_value, min(max_value, value))
 
 
-def _to_internal_value(value, unit_name):
-    try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if units:
-            return float(units.convert(float(value), unit_name, units.internalUnits))
-    except Exception:
-        pass
-    if str(unit_name).strip().lower() == "mm":
-        return float(value) / 10.0
-    return float(value)
+def _build_numeric_expression(value, unit_name):
+    base = f"{float(value):g}"
+    unit = (unit_name or "").strip()
+    return f"{base} {unit}".strip()
 
 
-def _from_internal_value(value, unit_name):
-    try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if units:
-            return float(units.convert(float(value), units.internalUnits, unit_name))
-    except Exception:
-        pass
-    if str(unit_name).strip().lower() == "mm":
-        return float(value) * 10.0
-    return float(value)
+def _parse_number_from_expression(expression):
+    raw = str(expression or "").strip()
+    if not raw:
+        raise ValueError("Leere Zahleneingabe.")
+    cleaned = raw.replace(" ", "")
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(",", ".")
+    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", cleaned)
+    if not match:
+        raise ValueError(f"Ungültige Zahl: {raw}")
+    return float(match.group(0))
 
 
 def _detect_ui_lang():
