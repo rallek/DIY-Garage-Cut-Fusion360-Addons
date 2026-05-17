@@ -4,6 +4,7 @@ import struct
 import tempfile
 import urllib.parse
 import zlib
+import json
 
 import adsk.core
 import adsk.fusion
@@ -35,6 +36,11 @@ _PREVIEW_SIZE = 84
 _preview_cache_dir = os.path.abspath(
     os.path.join(tempfile.gettempdir(), "diygc_catalog_preview_cache")
 )
+_preview_config_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "catalog_preview_config.json")
+)
+_preview_config_cache = None
+_texture_file_index_cache = {}
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -154,19 +160,26 @@ def _save_from_inputs(inputs):
         _set_status(inputs, "Fehler: Bitte Appearance auswaehlen.")
         return
 
+    appearance_obj = _find_appearance_by_name(appearance)
+
     if is_new:
         item_id = _generate_internal_id(catalog, item_type, item_name)
         if catalog.get(item_id):
             _set_status(inputs, f"Fehler: Interne ID bereits vorhanden: {item_id}")
             return
+        base_properties = {}
     else:
         item_id = current_id
         if not item_id:
             _set_status(inputs, "Fehler: Kein bestehender Eintrag ausgewaehlt.")
             return
-        if not catalog.get(item_id):
+        existing_item = catalog.get(item_id)
+        if not existing_item:
             _set_status(inputs, f"Fehler: Eintrag nicht gefunden: {item_id}")
             return
+        base_properties = dict(existing_item.properties or {})
+
+    base_properties.update(_build_appearance_metadata(appearance, appearance_obj))
 
     item = CatalogItem.from_dict(
         {
@@ -174,6 +187,7 @@ def _save_from_inputs(inputs):
             "type": item_type,
             "name": item_name,
             "appearance": appearance,
+            **base_properties,
         }
     )
     next_catalog = upsert_catalog_item(catalog, item)
@@ -450,16 +464,31 @@ def _find_texture_file_for_appearance(appearance):
     if not appearance:
         return None
 
+    maps = _collect_texture_maps_for_appearance(appearance)
+    return maps.get("preview")
+
+
+def _collect_texture_maps_for_appearance(appearance):
+    maps = {}
+    if not appearance:
+        return maps
+
     seen = set()
-    for texture in _iter_appearance_textures(appearance):
+    for entry in _iter_appearance_textures(appearance):
+        texture = entry.get("texture")
+        prop_name = entry.get("prop_name")
+        role = _guess_texture_role(prop_name)
+        if not texture:
+            continue
         marker = id(texture)
         if marker in seen:
             continue
         seen.add(marker)
         path = _extract_texture_file_path(texture)
         if path:
-            return path
-    return None
+            maps.setdefault(role, path)
+            maps.setdefault("preview", path)
+    return maps
 
 
 def _iter_appearance_textures(appearance):
@@ -474,16 +503,37 @@ def _iter_appearance_textures(appearance):
 
             connected_texture = getattr(prop, "connectedTexture", None)
             if connected_texture:
-                textures.append(connected_texture)
+                textures.append(
+                    {
+                        "texture": connected_texture,
+                        "prop_name": (getattr(prop, "name", "") or ""),
+                    }
+                )
 
             obj_type = getattr(prop, "objectType", "") or ""
             if "AppearanceTextureProperty" in obj_type:
                 value = getattr(prop, "value", None)
                 if value:
-                    textures.append(value)
+                    textures.append(
+                        {
+                            "texture": value,
+                            "prop_name": (getattr(prop, "name", "") or ""),
+                        }
+                    )
     except Exception:
         return []
     return textures
+
+
+def _guess_texture_role(prop_name):
+    name = (prop_name or "").strip().lower()
+    if any(token in name for token in ("rough", "gloss")):
+        return "roughness"
+    if any(token in name for token in ("bump", "normal", "relief", "height")):
+        return "bump"
+    if any(token in name for token in ("base", "color", "diffuse", "albedo", "bild")):
+        return "color"
+    return "other"
 
 
 def _extract_texture_file_path(texture):
@@ -540,6 +590,12 @@ def _resolve_image_path_candidate(value):
     if os.path.exists(direct):
         return direct
 
+    basename_candidate = os.path.basename(direct)
+    if basename_candidate:
+        from_index = _lookup_texture_basename(basename_candidate)
+        if from_index:
+            return from_index
+
     match = re.search(r"([A-Za-z]:[\\/][^|;]+?\.(?:png|jpg|jpeg|bmp|tif|tiff))", raw, re.IGNORECASE)
     if match:
         candidate = match.group(1).replace("/", "\\")
@@ -576,6 +632,98 @@ def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
+
+
+def _build_appearance_metadata(appearance_name, appearance_obj):
+    data = {
+        "appearance_resolved_name": appearance_name,
+    }
+    if appearance_obj:
+        try:
+            data["appearance_id"] = str(getattr(appearance_obj, "id", "") or "")
+        except Exception:
+            pass
+        try:
+            data["appearance_has_texture"] = bool(getattr(appearance_obj, "hasTexture", False))
+        except Exception:
+            data["appearance_has_texture"] = False
+    else:
+        data["appearance_has_texture"] = False
+
+    texture_maps = _collect_texture_maps_for_appearance(appearance_obj) if appearance_obj else {}
+    for key, value in texture_maps.items():
+        if value:
+            data[f"appearance_texture_{key}"] = value
+    if texture_maps.get("preview"):
+        data["preview_texture"] = texture_maps["preview"]
+    return data
+
+
+def _load_preview_config():
+    global _preview_config_cache
+    if _preview_config_cache is not None:
+        return _preview_config_cache
+
+    default_roots = [
+        r"%LOCALAPPDATA%\Autodesk\Common\Material Library\5.0.0\slib\resource\1\Mats",
+    ]
+    config = {
+        "material_texture_roots": default_roots,
+    }
+    try:
+        if os.path.exists(_preview_config_path):
+            with open(_preview_config_path, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                roots = loaded.get("material_texture_roots")
+                if isinstance(roots, list) and roots:
+                    config["material_texture_roots"] = [str(item) for item in roots if str(item).strip()]
+    except Exception as exc:
+        print(f"Catalog: Preview-Konfiguration konnte nicht geladen werden: {exc}")
+
+    _preview_config_cache = config
+    return config
+
+
+def _resolve_texture_roots():
+    config = _load_preview_config()
+    roots = []
+    for raw in config.get("material_texture_roots", []):
+        expanded = os.path.expandvars(str(raw)).strip()
+        if not expanded:
+            continue
+        normalized = os.path.abspath(expanded)
+        if os.path.isdir(normalized):
+            roots.append(normalized)
+    return roots
+
+
+def _build_texture_index(root):
+    index = {}
+    try:
+        for dirpath, _, filenames in os.walk(root):
+            for name in filenames:
+                lower = name.lower()
+                if not lower.endswith((".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")):
+                    continue
+                index.setdefault(lower, os.path.join(dirpath, name))
+    except Exception as exc:
+        print(f"Catalog: Texture-Index fehlgeschlagen ({root}): {exc}")
+    return index
+
+
+def _lookup_texture_basename(filename):
+    lower = (filename or "").strip().lower()
+    if not lower:
+        return None
+
+    for root in _resolve_texture_roots():
+        if root not in _texture_file_index_cache:
+            _texture_file_index_cache[root] = _build_texture_index(root)
+        path = _texture_file_index_cache[root].get(lower)
+        if path and os.path.exists(path):
+            return path
+    return None
 
 
 def _ensure_preview_png(token, rgb):
