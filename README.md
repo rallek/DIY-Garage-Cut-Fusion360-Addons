@@ -32,6 +32,7 @@ Für die inhaltliche und technische Übersicht gibt es zusätzlich:
 - [docs/projektuebersicht.md](docs/projektuebersicht.md)
 - [docs/github-workflow.md](docs/github-workflow.md)
 - [docs/datenmodell.md](docs/datenmodell.md)
+- [docs/katalog-typen-erweitern.md](docs/katalog-typen-erweitern.md)
 - [docs/architektur.md](docs/architektur.md)
 - [docs/workflow.md](docs/workflow.md)
 - [docs/lastenheft.md](docs/lastenheft.md)
