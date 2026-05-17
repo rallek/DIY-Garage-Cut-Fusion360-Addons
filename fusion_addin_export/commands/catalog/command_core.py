@@ -36,6 +36,7 @@ _is_syncing = False
 _reopen_after_save = False
 
 _INPUT_SELECTION = "diygc_catalog_selection"
+_INPUT_FILTER_TYPE = "diygc_catalog_filter_type"
 _INPUT_COPY = "diygc_catalog_copy"
 _INPUT_DELETE = "diygc_catalog_delete"
 _INPUT_TYPE = "diygc_catalog_type"
@@ -68,7 +69,10 @@ _label_counter = 0
 
 _STRINGS = {
     "de": {
+        "filter_type": "Filter",
+        "filter_all_types": "Alle Typen",
         "existing_entries": "Material",
+        "section_edit": "Bearbeiten",
         "create_new": "(Neu anlegen)",
         "copy_entry": "Als neuen Eintrag speichern",
         "delete_entry": "Eintrag löschen",
@@ -94,7 +98,10 @@ _STRINGS = {
         "appearance_none": "(Bitte wählen)",
     },
     "en": {
+        "filter_type": "Filter",
+        "filter_all_types": "All types",
         "existing_entries": "Material",
+        "section_edit": "Edit",
         "create_new": "(Create new)",
         "copy_entry": "Save as new entry",
         "delete_entry": "Delete entry",
@@ -152,6 +159,17 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         except Exception:
             pass
 
+        _add_field_label(inputs, _t("filter_type"))
+        filter_type = inputs.addDropDownCommandInput(
+            _INPUT_FILTER_TYPE,
+            "",
+            adsk.core.DropDownStyles.TextListDropDownStyle,
+        )
+        _try_set_full_width(filter_type)
+        filter_type.listItems.add(_t("filter_all_types"), True)
+        for type_id in _sorted_types():
+            filter_type.listItems.add(_type_label(type_id), False)
+
         _add_field_label(inputs, _t("existing_entries"))
         selection = inputs.addDropDownCommandInput(
             _INPUT_SELECTION,
@@ -160,6 +178,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         _try_set_full_width(selection)
         selection.listItems.add(_t("create_new"), True)
+
+        _add_section_header(inputs, _t("section_edit"))
 
         _add_field_label(inputs, _t("type"))
         type_input = inputs.addDropDownCommandInput(
@@ -210,7 +230,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         status.isFullWidth = True
 
         _populate_appearance_items(appearance_pick)
-        _populate_existing_items(selection)
+        _populate_existing_items(selection, filter_type=_read_filter_type(inputs))
         _sync_inputs(inputs, changed_id=None)
 
         on_input_changed = _InputChangedHandler()
@@ -382,7 +402,7 @@ def _delete_selected_entry(inputs):
     _set_status(inputs, _t("status_deleted"))
     selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
     if selection:
-        _populate_existing_items(selection)
+        _populate_existing_items(selection, filter_type=_read_filter_type(inputs))
     _sync_inputs(inputs, changed_id=_INPUT_SELECTION)
 
 
@@ -393,6 +413,15 @@ def _sync_inputs(inputs, changed_id=None):
         selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
         if not selection or not selection.selectedItem:
             return
+
+        if changed_id == _INPUT_FILTER_TYPE:
+            _populate_existing_items(
+                selection,
+                selected_id=_selected_item_id,
+                filter_type=_read_filter_type(inputs),
+            )
+            changed_id = _INPUT_SELECTION
+            _last_selection_label = None
 
         selected_label = selection.selectedItem.name or ""
         selected_item = _get_item_by_selection_label(selected_label)
@@ -414,6 +443,9 @@ def _sync_inputs(inputs, changed_id=None):
                 _set_string(inputs, _INPUT_NAME, "")
                 _set_bool(inputs, _INPUT_COPY, False)
                 _set_status(inputs, "")
+                filter_type = _read_filter_type(inputs)
+                if filter_type:
+                    _set_type_dropdown(inputs, filter_type)
                 _apply_type_defaults_to_inputs(inputs, _read_type_from_dropdown(inputs))
 
         if changed_id == _INPUT_TYPE:
@@ -474,27 +506,34 @@ def _load_catalog_data():
     return load_catalog()
 
 
-def _populate_existing_items(dropdown, selected_id=None):
+def _populate_existing_items(dropdown, selected_id=None, filter_type=None):
     global _selection_id_by_label
     _selection_id_by_label = {}
     dropdown.listItems.clear()
     create_new_label = _t("create_new")
     dropdown.listItems.add(create_new_label, selected_id is None)
+    has_selected = selected_id is None
 
     catalog = _load_catalog_data()
     for item in sorted(catalog.items, key=lambda x: ((x.name or "").lower(), _type_label(x.type).lower(), (x.id or "").lower())):
+        if filter_type and item.type != filter_type:
+            continue
         label = f"{item.name} [{_type_label(item.type)}]"
         if label in _selection_id_by_label:
             label = f"{label} · {item.id}"
         _selection_id_by_label[label] = item.id
-        dropdown.listItems.add(label, selected_id == item.id)
+        is_selected = selected_id == item.id
+        dropdown.listItems.add(label, is_selected)
+        has_selected = has_selected or is_selected
+    if not has_selected and dropdown.listItems.count > 0:
+        dropdown.listItems.item(0).isSelected = True
 
 
 def _refresh_selection_after_save(inputs, selected_id):
     selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
     if not selection:
         return
-    _populate_existing_items(selection, selected_id=selected_id)
+    _populate_existing_items(selection, selected_id=selected_id, filter_type=_read_filter_type(inputs))
 
 
 def _get_item_by_selection_label(label):
@@ -1130,6 +1169,14 @@ def _add_field_label(inputs, text):
     return lbl
 
 
+def _add_section_header(inputs, text):
+    html = f"<div style='margin-top:6px;padding-top:4px;border-top:1px solid #b9b9b9;font-weight:600'>{_escape_html(text)}</div>"
+    header_id = f"diygc_section_{_slugify(text)}_{_label_counter}"
+    box = inputs.addTextBoxCommandInput(header_id, "", html, 1, True)
+    box.isFullWidth = True
+    return box
+
+
 def _try_set_full_width(input_obj):
     try:
         input_obj.isFullWidth = True
@@ -1387,6 +1434,16 @@ def _set_dropdown(inputs, input_id, wanted):
 
 def _set_type_dropdown(inputs, type_id):
     _set_dropdown(inputs, _INPUT_TYPE, _type_label(type_id))
+
+
+def _read_filter_type(inputs):
+    display = _read_dropdown(inputs, _INPUT_FILTER_TYPE).lower()
+    if not display or display == _t("filter_all_types").lower():
+        return None
+    for type_id in get_catalog_types():
+        if display == _type_label(type_id).lower():
+            return type_id
+    return None
 
 
 def _read_type_from_dropdown(inputs):
