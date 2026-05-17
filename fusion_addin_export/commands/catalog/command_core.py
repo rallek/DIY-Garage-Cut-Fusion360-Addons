@@ -1,22 +1,37 @@
+import os
+import re
+import struct
+import zlib
+
 import adsk.core
 import adsk.fusion
 
 import export_config as config
-from shared.catalog import CATALOG_TYPES, CatalogItem, CatalogLoadError, load_catalog, save_catalog, upsert_catalog_item
+from shared.catalog import CATALOG_TYPES, CatalogItem, load_catalog, save_catalog, upsert_catalog_item
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
+_is_syncing = False
+_last_selection_label = None
 
 _INPUT_SELECTION = "diygc_catalog_selection"
-_INPUT_ID = "diygc_catalog_id"
+_INPUT_NEW_ENTRY = "diygc_catalog_new_entry"
+_INPUT_ID_VIEW = "diygc_catalog_id_view"
 _INPUT_TYPE = "diygc_catalog_type"
 _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
-_INPUT_APPEARANCE_PICK = "diygc_catalog_appearance_pick"
-_INPUT_NEW_ENTRY = "diygc_catalog_new_entry"
+_INPUT_APPEARANCE_PREVIEW = "diygc_catalog_appearance_preview"
+_INPUT_SAVE = "diygc_catalog_save"
+_INPUT_STATUS = "diygc_catalog_status"
 _INPUT_LIST = "diygc_catalog_list"
+
+_APPEARANCE_NONE_LABEL = "(Bitte waehlen)"
+_PREVIEW_SIZE = 84
+_preview_cache_dir = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "Resources", "_generated")
+)
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -24,6 +39,11 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
         cmd = event_args.command
         inputs = cmd.commandInputs
+
+        try:
+            cmd.okButtonText = "Schliessen"
+        except Exception:
+            pass
 
         selection = inputs.addDropDownCommandInput(
             _INPUT_SELECTION,
@@ -33,7 +53,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         selection.listItems.add("(Neu anlegen)", True)
 
         inputs.addBoolValueInput(_INPUT_NEW_ENTRY, "Neuen Eintrag anlegen", True, "", True)
-        inputs.addStringValueInput(_INPUT_ID, "ID", "")
+        id_box = inputs.addTextBoxCommandInput(_INPUT_ID_VIEW, "Interne ID", "-", 1, True)
+        id_box.isFullWidth = False
 
         type_input = inputs.addDropDownCommandInput(
             _INPUT_TYPE,
@@ -44,19 +65,26 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             type_input.listItems.add(item_type, i == 0)
 
         inputs.addStringValueInput(_INPUT_NAME, "Name", "")
+
         appearance_pick = inputs.addDropDownCommandInput(
-            _INPUT_APPEARANCE_PICK,
+            _INPUT_APPEARANCE,
             "Appearance aus Fusion",
             adsk.core.DropDownStyles.TextListDropDownStyle,
         )
-        appearance_pick.listItems.add("(Keine Auswahl)", True)
-        inputs.addStringValueInput(_INPUT_APPEARANCE, "Appearance", "")
+        appearance_pick.listItems.add(_APPEARANCE_NONE_LABEL, True)
+
+        preview_file = _ensure_preview_png("none", (160, 160, 160))
+        preview = inputs.addImageCommandInput(_INPUT_APPEARANCE_PREVIEW, "Vorschau", preview_file)
+        preview.isFullWidth = True
+
+        inputs.addBoolValueInput(_INPUT_SAVE, "Speichern", False, "", False)
+        status = inputs.addTextBoxCommandInput(_INPUT_STATUS, "", "", 2, True)
+        status.isFullWidth = True
         list_box = inputs.addTextBoxCommandInput(_INPUT_LIST, "Kataloguebersicht", "-", 12, True)
         list_box.isFullWidth = True
 
         _populate_appearance_items(appearance_pick)
         _populate_existing_items(selection)
-        _refresh_list_overview(inputs)
         _sync_inputs(inputs)
 
         on_input_changed = _InputChangedHandler()
@@ -70,12 +98,27 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
 class _InputChangedHandler(adsk.core.InputChangedEventHandler):
     def notify(self, args):
+        global _is_syncing
+        if _is_syncing:
+            return
         try:
             event_args = adsk.core.InputChangedEventArgs.cast(args)
+            changed = event_args.input if event_args else None
             command = event_args.firingEvent.sender if event_args else None
             inputs = command.commandInputs if command else None
             if not inputs:
                 return
+
+            changed_id = changed.id if changed else ""
+            if changed_id == _INPUT_SAVE:
+                if _read_bool(inputs, _INPUT_SAVE, False):
+                    _set_bool(inputs, _INPUT_SAVE, False)
+                    try:
+                        _save_from_inputs(inputs)
+                    except Exception as exc:
+                        _set_status(inputs, f"Fehler beim Speichern: {exc}")
+                return
+
             _sync_inputs(inputs)
         except Exception as exc:
             print(f"Catalog-InputChanged-Fehler: {exc}")
@@ -83,64 +126,44 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
 
 class _CommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
-        app = adsk.core.Application.get()
-        ui = app.userInterface if app else None
-        if not app or not ui:
-            print("Catalog: App/UI nicht verfuegbar.")
-            return
-        try:
-            event_args = adsk.core.CommandEventArgs.cast(args)
-            command = event_args.command if event_args else None
-            inputs = command.commandInputs if command else None
-            if not inputs:
-                ui.messageBox("Catalog-Fehler: Keine Command-Inputs verfuegbar.")
-                return
-
-            created, saved_item = _save_from_inputs(inputs)
-            action = "angelegt" if created else "aktualisiert"
-            ui.messageBox(f"Katalogeintrag gespeichert ({action}):\n{saved_item.id}")
-            _refresh_list_overview(inputs)
-            _refresh_selection_after_save(inputs, saved_item.id)
-            _sync_inputs(inputs)
-        except CatalogLoadError as exc:
-            ui.messageBox(f"Katalog konnte nicht gespeichert werden:\n{exc}")
-        except ValueError as exc:
-            ui.messageBox(f"Ungueltige Eingabe:\n{exc}")
-        except Exception as exc:
-            print(f"Catalog-Execute-Fehler: {exc}")
-            ui.messageBox(f"Katalogspeicherung fehlgeschlagen:\n{exc}")
-
-
-def _load_catalog_data():
-    return load_catalog()
+        # Speichern erfolgt bewusst ueber den separaten "Speichern"-Button,
+        # damit Validierungsfehler den Dialog nicht schliessen.
+        return
 
 
 def _save_from_inputs(inputs):
     catalog = _load_catalog_data()
     is_new = _read_bool(inputs, _INPUT_NEW_ENTRY, True)
-    item_id = _read_string(inputs, _INPUT_ID)
+    current_id = _read_id_from_view(inputs)
     item_type = _read_dropdown(inputs, _INPUT_TYPE)
     item_name = _read_string(inputs, _INPUT_NAME)
-    appearance = _read_string(inputs, _INPUT_APPEARANCE)
+    appearance = _read_dropdown(inputs, _INPUT_APPEARANCE)
 
-    if not item_id:
-        raise ValueError("ID darf nicht leer sein.")
-    if not item_type:
-        raise ValueError("Typ darf nicht leer sein.")
-    if item_type not in CATALOG_TYPES:
-        raise ValueError(f"Typ nicht unterstuetzt: {item_type}")
+    if not item_type or item_type not in CATALOG_TYPES:
+        _set_status(inputs, "Fehler: Bitte gueltigen Typ waehlen.")
+        return
     if not item_name:
-        raise ValueError("Name darf nicht leer sein.")
-    if not appearance:
-        raise ValueError("Appearance darf nicht leer sein.")
+        _set_status(inputs, "Fehler: Name darf nicht leer sein.")
+        return
+    if not appearance or appearance == _APPEARANCE_NONE_LABEL:
+        _set_status(inputs, "Fehler: Bitte Appearance auswaehlen.")
+        return
 
-    existing = catalog.get(item_id)
-    if is_new and existing is not None:
-        raise ValueError(f"ID existiert bereits: {item_id}")
-    if not is_new and existing is None:
-        raise ValueError(f"Eintrag mit ID nicht gefunden: {item_id}")
+    if is_new:
+        item_id = _generate_internal_id(catalog, item_type, item_name)
+        if catalog.get(item_id):
+            _set_status(inputs, f"Fehler: Interne ID bereits vorhanden: {item_id}")
+            return
+    else:
+        item_id = current_id
+        if not item_id:
+            _set_status(inputs, "Fehler: Kein bestehender Eintrag ausgewaehlt.")
+            return
+        if not catalog.get(item_id):
+            _set_status(inputs, f"Fehler: Eintrag nicht gefunden: {item_id}")
+            return
 
-    new_item = CatalogItem.from_dict(
+    item = CatalogItem.from_dict(
         {
             "id": item_id,
             "type": item_type,
@@ -148,9 +171,26 @@ def _save_from_inputs(inputs):
             "appearance": appearance,
         }
     )
-    next_catalog = upsert_catalog_item(catalog, new_item)
+    next_catalog = upsert_catalog_item(catalog, item)
     save_catalog(next_catalog)
-    return existing is None, new_item
+
+    _set_status(inputs, f"Gespeichert: {item.id}")
+    _refresh_selection_after_save(inputs, item.id)
+    _set_bool(inputs, _INPUT_NEW_ENTRY, False)
+    _sync_inputs(inputs)
+
+
+def _load_catalog_data():
+    return load_catalog()
+
+
+def _populate_existing_items(dropdown, selected_id=None):
+    dropdown.listItems.clear()
+    dropdown.listItems.add("(Neu anlegen)", selected_id is None)
+    catalog = _load_catalog_data()
+    for item in sorted(catalog.items, key=lambda x: x.id.lower()):
+        label = f"{item.id} | {item.type} | {item.name}"
+        dropdown.listItems.add(label, selected_id == item.id)
 
 
 def _refresh_selection_after_save(inputs, selected_id):
@@ -160,44 +200,63 @@ def _refresh_selection_after_save(inputs, selected_id):
     _populate_existing_items(selection, selected_id=selected_id)
 
 
-def _populate_existing_items(dropdown, selected_id=None):
-    dropdown.listItems.clear()
-    dropdown.listItems.add("(Neu anlegen)", selected_id is None)
-    catalog = _load_catalog_data()
-    for item in sorted(catalog.items, key=lambda x: x.id.lower()):
-        label = f"{item.id} | {item.type} | {item.name}"
-        is_selected = selected_id == item.id
-        dropdown.listItems.add(label, is_selected)
-
-
 def _sync_inputs(inputs):
-    selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
-    if not selection or not selection.selectedItem:
-        return
+    global _is_syncing, _last_selection_label
+    _is_syncing = True
+    try:
+        selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
+        if not selection or not selection.selectedItem:
+            _refresh_list_overview(inputs)
+            return
 
-    selected_text = selection.selectedItem.name or ""
-    selected_id = selected_text.split("|", 1)[0].strip() if "|" in selected_text else ""
-    is_new_mode = _read_bool(inputs, _INPUT_NEW_ENTRY, True)
-    selected_item = _load_catalog_data().get(selected_id) if selected_id else None
+        selected_text = selection.selectedItem.name or ""
+        selected_id = selected_text.split("|", 1)[0].strip() if "|" in selected_text else ""
+        selected_item = _load_catalog_data().get(selected_id) if selected_id else None
 
-    if selected_item and not is_new_mode:
-        _set_string(inputs, _INPUT_ID, selected_item.id)
-        _set_dropdown(inputs, _INPUT_TYPE, selected_item.type)
-        _set_string(inputs, _INPUT_NAME, selected_item.name)
-        _set_string(inputs, _INPUT_APPEARANCE, selected_item.appearance)
-        _set_appearance_selection(inputs, selected_item.appearance)
-    elif selected_item and is_new_mode:
-        _set_string(inputs, _INPUT_ID, "")
-        _set_string(inputs, _INPUT_NAME, "")
-        _set_string(inputs, _INPUT_APPEARANCE, "")
-        _set_appearance_selection(inputs, "")
-    elif not selected_item:
-        _set_bool(inputs, _INPUT_NEW_ENTRY, True)
-        _set_appearance_selection(inputs, _read_string(inputs, _INPUT_APPEARANCE))
+        is_new_mode = _read_bool(inputs, _INPUT_NEW_ENTRY, True)
+        if selected_item and selected_text != _last_selection_label:
+            _set_bool(inputs, _INPUT_NEW_ENTRY, False)
+            is_new_mode = False
 
-    _sync_appearance_text_from_dropdown(inputs)
+        if not selected_item:
+            is_new_mode = True
+            _set_bool(inputs, _INPUT_NEW_ENTRY, True)
 
-    _refresh_list_overview(inputs)
+        if selected_item and not is_new_mode:
+            _set_dropdown(inputs, _INPUT_TYPE, selected_item.type)
+            _set_string(inputs, _INPUT_NAME, selected_item.name)
+            _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
+            _set_id_view(inputs, selected_item.id)
+        else:
+            current_name = _read_string(inputs, _INPUT_NAME)
+            current_type = _read_dropdown(inputs, _INPUT_TYPE)
+            _set_id_view(inputs, _generate_internal_id(_load_catalog_data(), current_type, current_name))
+
+        _refresh_appearance_preview(inputs)
+        _refresh_list_overview(inputs)
+        _last_selection_label = selected_text
+    finally:
+        _is_syncing = False
+
+
+def _set_id_view(inputs, value):
+    box = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_ID_VIEW))
+    if box:
+        box.text = value if value else "-"
+
+
+def _read_id_from_view(inputs):
+    box = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_ID_VIEW))
+    if not box:
+        return ""
+    value = (box.text or "").strip()
+    return "" if value == "-" else value
+
+
+def _set_status(inputs, message):
+    status = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_STATUS))
+    if status:
+        status.text = message or ""
 
 
 def _refresh_list_overview(inputs):
@@ -215,6 +274,207 @@ def _refresh_list_overview(inputs):
         box.text = "\n".join(lines)
     except Exception as exc:
         box.text = f"Katalog kann nicht geladen werden: {exc}"
+
+
+def _populate_appearance_items(dropdown):
+    dropdown.listItems.clear()
+    dropdown.listItems.add(_APPEARANCE_NONE_LABEL, True)
+    for name in _collect_appearance_names():
+        dropdown.listItems.add(name, False)
+
+
+def _collect_appearance_names():
+    seen = set()
+    names = []
+
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+    if design:
+        try:
+            appearances = getattr(design, "appearances", None)
+            count = appearances.count if appearances else 0
+            for i in range(count):
+                entry = appearances.item(i)
+                name = (entry.name or "").strip() if entry else ""
+                if not name:
+                    continue
+                key = name.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                names.append(name)
+        except Exception as exc:
+            print(f"Catalog: Design-Appearances konnten nicht gelesen werden: {exc}")
+
+    if app:
+        try:
+            libs = getattr(app, "materialLibraries", None)
+            lib_count = libs.count if libs else 0
+            for li in range(lib_count):
+                library = libs.item(li)
+                if not library:
+                    continue
+                appearances = getattr(library, "appearances", None)
+                app_count = appearances.count if appearances else 0
+                for ai in range(app_count):
+                    entry = appearances.item(ai)
+                    name = (entry.name or "").strip() if entry else ""
+                    if not name:
+                        continue
+                    key = name.lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    names.append(name)
+        except Exception as exc:
+            print(f"Catalog: Library-Appearances konnten nicht gelesen werden: {exc}")
+
+    return sorted(names, key=lambda x: x.lower())
+
+
+def _refresh_appearance_preview(inputs):
+    image_input = adsk.core.ImageCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PREVIEW))
+    if not image_input:
+        return
+
+    appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
+    if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
+        image_input.imageFile = _ensure_preview_png("none", (160, 160, 160))
+        return
+
+    color = _find_color_for_appearance(appearance_name)
+    if color is None:
+        color = (110, 130, 170)
+    image_input.imageFile = _ensure_preview_png(_slugify(appearance_name), color)
+
+
+def _find_color_for_appearance(appearance_name):
+    wanted = (appearance_name or "").strip().lower()
+    if not wanted:
+        return None
+
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+
+    def _scan_appearances(appearances):
+        if not appearances:
+            return None
+        try:
+            for i in range(appearances.count):
+                entry = appearances.item(i)
+                if not entry:
+                    continue
+                name = (entry.name or "").strip().lower()
+                if name != wanted:
+                    continue
+                return _extract_color_from_appearance(entry)
+        except Exception:
+            return None
+        return None
+
+    color = _scan_appearances(getattr(design, "appearances", None) if design else None)
+    if color is not None:
+        return color
+
+    if app:
+        try:
+            libs = getattr(app, "materialLibraries", None)
+            lib_count = libs.count if libs else 0
+            for li in range(lib_count):
+                library = libs.item(li)
+                if not library:
+                    continue
+                color = _scan_appearances(getattr(library, "appearances", None))
+                if color is not None:
+                    return color
+        except Exception:
+            return None
+    return None
+
+
+def _extract_color_from_appearance(appearance):
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+            obj_type = getattr(prop, "objectType", "") or ""
+            if "ColorProperty" not in obj_type:
+                continue
+            color = getattr(prop, "value", None)
+            if not color:
+                continue
+            return (
+                max(0, min(255, int(getattr(color, "red", 0)))),
+                max(0, min(255, int(getattr(color, "green", 0)))),
+                max(0, min(255, int(getattr(color, "blue", 0)))),
+            )
+    except Exception:
+        return None
+    return None
+
+
+def _ensure_preview_png(token, rgb):
+    try:
+        os.makedirs(_preview_cache_dir, exist_ok=True)
+    except Exception:
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Resources", "64x64.png"))
+
+    safe = re.sub(r"[^a-z0-9_]+", "_", (token or "none").lower()).strip("_") or "none"
+    path = os.path.join(_preview_cache_dir, f"appearance_{safe}_{rgb[0]}_{rgb[1]}_{rgb[2]}.png")
+    if os.path.exists(path):
+        return path
+
+    png_bytes = _build_solid_png(_PREVIEW_SIZE, _PREVIEW_SIZE, rgb)
+    with open(path, "wb") as handle:
+        handle.write(png_bytes)
+    return path
+
+
+def _build_solid_png(width, height, rgb):
+    def _chunk(name, data):
+        return (
+            struct.pack("!I", len(data))
+            + name
+            + data
+            + struct.pack("!I", zlib.crc32(name + data) & 0xFFFFFFFF)
+        )
+
+    row = bytes([rgb[0], rgb[1], rgb[2], 255]) * width
+    raw = b"".join(b"\x00" + row for _ in range(height))
+    ihdr = struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    idat = zlib.compress(raw, 9)
+    return b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
+
+
+def _generate_internal_id(catalog, item_type, item_name):
+    item_type_norm = (item_type or "item").strip().lower()
+    slug = _slugify(item_name)
+    base = f"{item_type_norm}.{slug or 'item'}"
+    if not catalog.get(base):
+        return base
+    suffix = 2
+    while True:
+        candidate = f"{base}_{suffix}"
+        if not catalog.get(candidate):
+            return candidate
+        suffix += 1
+
+
+def _slugify(text):
+    if not text:
+        return "item"
+    text = text.strip().lower()
+    text = (
+        text.replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+    )
+    text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    return text or "item"
 
 
 def _read_string(inputs, input_id):
@@ -261,85 +521,12 @@ def _set_dropdown(inputs, input_id, wanted):
             item.isSelected = True
             return
 
-
-def _populate_appearance_items(dropdown):
-    seen = set()
-    names = []
-
-    app = adsk.core.Application.get()
-    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-    if design:
-        try:
-            appearances = getattr(design, "appearances", None)
-            count = appearances.count if appearances else 0
-            for i in range(count):
-                entry = appearances.item(i)
-                if not entry or not entry.name:
-                    continue
-                name = str(entry.name).strip()
-                if not name:
-                    continue
-                norm = name.lower()
-                if norm in seen:
-                    continue
-                seen.add(norm)
-                names.append(name)
-        except Exception as exc:
-            print(f"Catalog: Design-Appearances konnten nicht gelesen werden: {exc}")
-
-    if app:
-        try:
-            libs = getattr(app, "materialLibraries", None)
-            lib_count = libs.count if libs else 0
-            for li in range(lib_count):
-                library = libs.item(li)
-                if not library:
-                    continue
-                appearances = getattr(library, "appearances", None)
-                app_count = appearances.count if appearances else 0
-                for ai in range(app_count):
-                    entry = appearances.item(ai)
-                    if not entry or not entry.name:
-                        continue
-                    name = str(entry.name).strip()
-                    if not name:
-                        continue
-                    norm = name.lower()
-                    if norm in seen:
-                        continue
-                    seen.add(norm)
-                    names.append(name)
-        except Exception as exc:
-            print(f"Catalog: Library-Appearances konnten nicht gelesen werden: {exc}")
-
-    for name in sorted(names, key=lambda x: x.lower()):
-        dropdown.listItems.add(name, False)
-
-
-def _set_appearance_selection(inputs, appearance_name):
-    pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PICK))
-    if not pick or pick.listItems.count < 1:
+    if wanted and wanted_norm != _APPEARANCE_NONE_LABEL.lower():
+        dd.listItems.add(wanted, True)
         return
-    wanted = (appearance_name or "").strip().lower()
-    if not wanted:
-        pick.listItems.item(0).isSelected = True
-        return
-    for i in range(pick.listItems.count):
-        item = pick.listItems.item(i)
-        if (item.name or "").strip().lower() == wanted:
-            item.isSelected = True
-            return
-    pick.listItems.item(0).isSelected = True
 
-
-def _sync_appearance_text_from_dropdown(inputs):
-    pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PICK))
-    text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE))
-    if not pick or not text or not pick.selectedItem:
-        return
-    selected_name = (pick.selectedItem.name or "").strip()
-    if selected_name and selected_name != "(Keine Auswahl)":
-        text.value = selected_name
+    if dd.listItems.count > 0:
+        dd.listItems.item(0).isSelected = True
 
 
 def _get_or_create_panel(workspace):
