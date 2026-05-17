@@ -26,22 +26,41 @@ consumable
 }
 ```
 
-## sheet
+## Typ-spezifische Felder (konfigurierbar)
+
+Konfiguration:
+
+```text
+catalog_type_config.json
+```
+
+Regel:
+- Felder werden pro `type` in der Konfiguration definiert.
+- `catalog.json` speichert nur die Felder, die für den jeweiligen Typ relevant sind.
+
+### Standard: sheet
 
 ```json
 {
-  "thickness_mm": 19,
-  "default_trim_allowance_mm": 2
+  "default_trim_allowance_mm": 0.0
 }
 ```
 
-## edge
+Bereich:
+- `0.0` bis `5.0`
+- Schrittweite `0.1`
+
+### Standard: edge
 
 ```json
 {
-  "thickness_mm": 2
+  "thickness_mm": 0.0
 }
 ```
+
+Bereich:
+- `0.0` bis `10.0`
+- Schrittweite `0.1`
 
 ---
 
@@ -91,3 +110,16 @@ Kein zusätzliches CSV-Feld.
 
 Nur Visualisierung.
 Nie führende Datenquelle.
+
+---
+
+# CSV-Bezug
+
+CSV-Header bleibt unverändert.
+
+Typspezifische Felder aus dem Katalog werden in der Spalte `attributes` ergänzt, z. B.:
+
+```text
+DIYGarageCut.catalog:item_id=sheet.mdf
+DIYGarageCut.catalog:default_trim_allowance_mm=0.5
+```

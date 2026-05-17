@@ -4,6 +4,7 @@ import csv
 import re
 
 import export_config as config
+from shared.catalog import get_csv_field_keys, load_catalog
 
 _handlers = []
 _active_panel_id = None
@@ -42,7 +43,8 @@ def _run_export_mode(app, ui):
         print("CSV-Export: Vom Nutzer abgebrochen.")
         return
 
-    rows = _collect_visible_body_rows(app)
+    catalog = _try_load_catalog()
+    rows = _collect_visible_body_rows(app, catalog)
     if not rows:
         ui.messageBox("Keine sichtbaren Bodies gefunden. Es wurde keine CSV erzeugt.")
         print("CSV-Export: Keine sichtbaren Bodies gefunden.")
@@ -87,7 +89,7 @@ def _build_default_export_filename(app):
     return f"{base_name}.csv"
 
 
-def _collect_visible_body_rows(app):
+def _collect_visible_body_rows(app, catalog):
     rows = []
     seen_tokens = set()
     design = adsk.fusion.Design.cast(app.activeProduct)
@@ -97,35 +99,35 @@ def _collect_visible_body_rows(app):
 
     root = design.rootComponent
     if root:
-        _append_component_bodies(root, rows, seen_tokens)
-        _append_occurrence_bodies_recursive(root.occurrences, rows, seen_tokens)
+        _append_component_bodies(root, rows, seen_tokens, catalog)
+        _append_occurrence_bodies_recursive(root.occurrences, rows, seen_tokens, catalog)
     return rows
 
 
-def _append_component_bodies(component, rows, seen_tokens):
+def _append_component_bodies(component, rows, seen_tokens, catalog):
     try:
         for body in component.bRepBodies:
-            _append_body_row_if_visible(body, rows, seen_tokens)
+            _append_body_row_if_visible(body, rows, seen_tokens, catalog)
     except Exception as exc:
         print(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}")
 
 
-def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens):
+def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog):
     try:
         if not occurrences:
             return
         for occ in occurrences:
             try:
                 for body in occ.bRepBodies:
-                    _append_body_row_if_visible(body, rows, seen_tokens)
-                _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens)
+                    _append_body_row_if_visible(body, rows, seen_tokens, catalog)
+                _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens, catalog)
             except Exception as exc:
                 print(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}")
     except Exception as exc:
         print(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}")
 
 
-def _append_body_row_if_visible(body, rows, seen_tokens):
+def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
     if not body:
         return
     try:
@@ -135,17 +137,17 @@ def _append_body_row_if_visible(body, rows, seen_tokens):
         if token in seen_tokens:
             return
         seen_tokens.add(token)
-        rows.append(_body_to_csv_row(body))
+        rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
         print(f"CSV-Export: Body uebersprungen: {exc}")
 
 
-def _body_to_csv_row(body):
+def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
     width, height, depth = _get_dimensions_from_bounding_box(body)
     material_name = _safe_name(getattr(body, "material", None))
     appearance_name = _safe_name(getattr(body, "appearance", None))
-    attr_text = _collect_attributes_as_text(body)
+    attr_text = _collect_attributes_as_text(body, catalog)
     return [name, width, height, depth, material_name, appearance_name, attr_text]
 
 
@@ -189,28 +191,66 @@ def _safe_name(obj):
     return "-"
 
 
-def _collect_attributes_as_text(body):
+def _collect_attributes_as_text(body, catalog):
     entries = []
     try:
-        attributes = getattr(body, "attributes", None)
-        if attributes is not None and attributes.count > 0:
-            for i in range(attributes.count):
-                attr = attributes.item(i)
-                if not attr:
-                    continue
-                group = attr.groupName if attr.groupName else "-"
-                name = attr.name if attr.name else "-"
-                value = attr.value if attr.value is not None else "-"
-                entries.append(f"{group}:{name}={value}")
-
-        # Fallback aus Properties-AddIn: Design-/Root-Attribute mit Body-Token-Prefix.
-        token = _get_entity_token(body)
-        if token:
-            entries.extend(_collect_design_fallback_attributes(token))
+        attrs = _collect_body_attributes(body)
+        for group, name, value in attrs:
+            entries.append(f"{group}:{name}={value}")
+        entries.extend(_collect_catalog_csv_entries(attrs, catalog))
     except Exception as exc:
         print(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}")
         return "-"
     return ";".join(entries) if entries else "-"
+
+
+def _collect_body_attributes(body):
+    out = []
+    attributes = getattr(body, "attributes", None)
+    if attributes is not None and attributes.count > 0:
+        for i in range(attributes.count):
+            attr = attributes.item(i)
+            if not attr:
+                continue
+            out.append(
+                (
+                    attr.groupName if attr.groupName else "-",
+                    attr.name if attr.name else "-",
+                    attr.value if attr.value is not None else "-",
+                )
+            )
+    token = _get_entity_token(body)
+    if token:
+        out.extend(_collect_design_fallback_attributes(token))
+    return out
+
+
+def _collect_catalog_csv_entries(attributes, catalog):
+    if not catalog:
+        return []
+    material_id = _resolve_catalog_material_id(attributes)
+    if not material_id:
+        return []
+    item = catalog.get(material_id)
+    if not item:
+        return []
+    entries = [
+        f"DIYGarageCut.catalog:item_id={item.id}",
+        f"DIYGarageCut.catalog:item_type={item.type}",
+        f"DIYGarageCut.catalog:item_name={item.name}",
+    ]
+    for key in get_csv_field_keys(item.type):
+        if key in (item.properties or {}):
+            entries.append(f"DIYGarageCut.catalog:{key}={item.properties.get(key)}")
+    return entries
+
+
+def _resolve_catalog_material_id(attributes):
+    preferred_keys = ("material_id", "material_typ")
+    for group, key, value in attributes:
+        if key in preferred_keys and value not in (None, "", "-"):
+            return str(value).strip()
+    return None
 
 
 def _write_csv(path, rows):
@@ -258,11 +298,19 @@ def _collect_design_fallback_attributes(token):
                 continue
             key = name[len(prefix):]
             val = attr.value if attr.value is not None else "-"
-            mapped.append(f"{attr.groupName}:{key}={val}")
+            mapped.append((attr.groupName if attr.groupName else "-", key, val))
         return mapped
     except Exception as exc:
         print(f"CSV-Export: Design-Fallback-Attribute konnten nicht gelesen werden: {exc}")
         return []
+
+
+def _try_load_catalog():
+    try:
+        return load_catalog()
+    except Exception as exc:
+        print(f"CSV-Export: Catalog konnte nicht geladen werden: {exc}")
+        return None
 
 
 def _get_or_create_panel(workspace):

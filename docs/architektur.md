@@ -67,6 +67,7 @@ shared/
 
 ```text
 catalog.json
+catalog_type_config.json
 ```
 
 Typen:
@@ -76,6 +77,11 @@ Typen:
 - profile
 - hardware
 - consumable
+
+Typ-spezifische Felder:
+- kommen aus `catalog_type_config.json`
+- werden im Catalog-Dialog dynamisch angezeigt
+- werden bei CSV in `attributes` berücksichtigt
 
 ---
 

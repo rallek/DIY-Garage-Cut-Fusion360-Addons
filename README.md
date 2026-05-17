@@ -214,3 +214,19 @@ Hinweise:
 - Umgebungsvariablen wie `%LOCALAPPDATA%` werden automatisch aufgeloest.
 - Der Pfad ist pro Benutzer/Installation unterschiedlich und deshalb konfigurierbar.
 - Beim Speichern eines Catalog-Eintrags versucht das Add-in, Texture-Pfade automatisch aus der gewaehlten Fusion-Appearance mitzunehmen (`preview_texture`, `appearance_texture_color`, usw.).
+
+## Catalog-Typkonfiguration (Issue #22)
+
+Datei:
+
+- `catalog_type_config.json`
+
+Zweck:
+
+- Definiert verfuegbare Katalog-Typen.
+- Definiert optionale typspezifische Felder (z. B. `default_trim_allowance_mm`, `thickness_mm`).
+- Steuert, welche dieser Felder in der CSV-Spalte `attributes` zusaetzlich ausgegeben werden.
+
+Hinweis:
+
+- Die CSV-Kopfzeile bleibt unveraendert.
