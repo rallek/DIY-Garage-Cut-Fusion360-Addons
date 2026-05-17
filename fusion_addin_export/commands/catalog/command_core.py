@@ -216,8 +216,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
         preview_hint.isFullWidth = True
 
-        _add_field_label(inputs, _t("copy_entry"))
-        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
+        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, _t("copy_entry"), True, "", False)
         copy_btn.isFullWidth = False
 
         delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, _t("delete_entry"), True, "", False)
@@ -986,25 +985,10 @@ def _add_type_specific_field_inputs(inputs):
             kind = field.get("kind")
             ctrl = None
             if kind == "number":
-                unit = str(field.get("storage_unit", "") or "")
-                if str(field.get("quantity", "") or "").strip().lower() == "length":
-                    min_value = _to_internal_value(float(field.get("min", 0.0)), unit)
-                    max_value = _to_internal_value(float(field.get("max", 0.0)), unit)
-                    step = _to_internal_value(float(field.get("step", 0.1)), unit)
-                    default = _to_internal_value(float(field.get("default", 0.0)), unit)
-                else:
-                    min_value = float(field.get("min", 0.0))
-                    max_value = float(field.get("max", 0.0))
-                    step = float(field.get("step", 0.1))
-                    default = float(field.get("default", 0.0))
-                ctrl = inputs.addFloatSpinnerCommandInput(
+                ctrl = inputs.addStringValueInput(
                     input_id,
                     "",
-                    unit,
-                    min_value,
-                    max_value,
-                    step,
-                    default,
+                    _format_number_for_input(field.get("default", 0.0)),
                 )
             elif kind == "string":
                 ctrl = inputs.addStringValueInput(input_id, "", str(field.get("default", "")))
@@ -1031,8 +1015,14 @@ def _add_type_specific_field_inputs(inputs):
 def _field_label(field):
     labels = field.get("labels", {})
     if _ui_lang == "en":
-        return str(labels.get("en", field.get("key", "")))
-    return str(labels.get("de", field.get("key", "")))
+        base = str(labels.get("en", field.get("key", "")))
+    else:
+        base = str(labels.get("de", field.get("key", "")))
+    if field.get("kind") == "number":
+        unit = str(field.get("storage_unit", "") or "").strip()
+        if unit:
+            return f"{base} ({unit})"
+    return base
 
 
 def _extract_type_properties(type_id, properties):
@@ -1058,13 +1048,10 @@ def _read_type_specific_values(inputs, type_id):
             continue
         kind = field.get("kind")
         if kind == "number":
-            spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
-            if not spinner:
+            item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
+            if not item:
                 continue
-            value = float(spinner.value)
-            unit = str(field.get("storage_unit", "") or "")
-            if str(field.get("quantity", "") or "").strip().lower() == "length":
-                value = _from_internal_value(value, unit)
+            value = _parse_number_input(item.value)
             values[key] = value
             continue
         if kind == "string":
@@ -1096,16 +1083,14 @@ def _set_type_specific_form_values(inputs, type_id, properties):
         value = source.get(key, field.get("default", 0.0))
         kind = field.get("kind")
         if kind == "number":
-            spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
-            if not spinner:
+            item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
+            if not item:
                 continue
             try:
                 numeric = float(value)
             except Exception:
                 numeric = float(field.get("default", 0.0))
-            if str(field.get("quantity", "") or "").strip().lower() == "length":
-                numeric = _to_internal_value(numeric, str(field.get("storage_unit", "") or ""))
-            spinner.value = numeric
+            item.value = _format_number_for_input(numeric)
             continue
         if kind == "string":
             item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
@@ -1474,32 +1459,33 @@ def _clamp(min_value, max_value, value):
     return max(min_value, min(max_value, value))
 
 
-def _to_internal_value(value, unit_name):
+def _format_number_for_input(value):
     try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if units:
-            return float(units.convert(float(value), unit_name, units.internalUnits))
+        numeric = float(value)
     except Exception:
-        pass
-    if str(unit_name).strip().lower() == "mm":
-        return float(value) / 10.0
-    return float(value)
+        numeric = 0.0
+    text = f"{numeric:g}"
+    if _ui_lang == "de":
+        return text.replace(".", ",")
+    return text
 
 
-def _from_internal_value(value, unit_name):
-    try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if units:
-            return float(units.convert(float(value), units.internalUnits, unit_name))
-    except Exception:
-        pass
-    if str(unit_name).strip().lower() == "mm":
-        return float(value) * 10.0
-    return float(value)
+def _parse_number_input(text):
+    raw = str(text or "").strip()
+    if not raw:
+        raise ValueError("leer")
+    cleaned = raw.replace(" ", "")
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(",", ".")
+    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", cleaned)
+    if not match:
+        raise ValueError(f"keine Zahl: {raw}")
+    return float(match.group(0))
 
 
 def _detect_ui_lang():
