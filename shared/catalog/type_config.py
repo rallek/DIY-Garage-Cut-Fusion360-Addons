@@ -11,14 +11,17 @@ _DEFAULT_TYPE_CONFIG = {
             "labels": {"de": "Platte", "en": "Sheet"},
             "fields": [
                 {
-                    "key": "default_trim_allowance_mm",
+                    "key": "sheet_default_trim_allowance",
                     "kind": "number",
-                    "labels": {"de": "Standard-Fräszugabe (mm)", "en": "Default trim allowance (mm)"},
+                    "labels": {"de": "Standard-Fräszugabe", "en": "Default trim allowance"},
                     "min": 0.0,
                     "max": 5.0,
                     "step": 0.1,
                     "default": 0.0,
                     "csv": True,
+                    "quantity": "length",
+                    "storage_unit": "mm",
+                    "legacy_keys": ["default_trim_allowance_mm"],
                 }
             ],
         },
@@ -32,14 +35,17 @@ _DEFAULT_TYPE_CONFIG = {
             "labels": {"de": "Kante", "en": "Edge"},
             "fields": [
                 {
-                    "key": "thickness_mm",
+                    "key": "edge_thickness",
                     "kind": "number",
-                    "labels": {"de": "Materialdicke (mm)", "en": "Thickness (mm)"},
+                    "labels": {"de": "Materialdicke", "en": "Edge thickness"},
                     "min": 0.0,
                     "max": 10.0,
                     "step": 0.1,
                     "default": 0.0,
                     "csv": True,
+                    "quantity": "length",
+                    "storage_unit": "mm",
+                    "legacy_keys": ["thickness_mm"],
                 }
             ],
         },
@@ -98,6 +104,15 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         step = 0.1
     default = _to_float(raw.get("default"), min_value)
     default = max(min_value, min(max_value, default))
+    legacy_keys_raw = raw.get("legacy_keys")
+    legacy_keys: List[str] = []
+    if isinstance(legacy_keys_raw, list):
+        for entry in legacy_keys_raw:
+            key_name = str(entry or "").strip()
+            if key_name and key_name != key and key_name not in legacy_keys:
+                legacy_keys.append(key_name)
+    quantity = str(raw.get("quantity", "number") or "number").strip().lower()
+    storage_unit = str(raw.get("storage_unit", "") or "").strip()
     return {
         "key": key,
         "kind": "number",
@@ -107,6 +122,9 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "step": step,
         "default": default,
         "csv": bool(raw.get("csv", False)),
+        "quantity": quantity,
+        "storage_unit": storage_unit,
+        "legacy_keys": legacy_keys,
     }
 
 
@@ -229,6 +247,15 @@ def get_all_type_field_keys() -> Set[str]:
     return keys
 
 
+def get_all_type_field_alias_keys() -> Set[str]:
+    keys: Set[str] = set()
+    for type_id in get_catalog_types():
+        for field in get_type_fields(type_id):
+            for legacy_key in field.get("legacy_keys", []):
+                keys.add(str(legacy_key))
+    return keys
+
+
 def get_type_default_properties(type_id: str) -> Dict[str, Any]:
     defaults: Dict[str, Any] = {}
     for field in get_type_fields(type_id):
@@ -249,9 +276,30 @@ def get_csv_field_keys(type_id: str) -> List[str]:
     return keys
 
 
+def get_csv_fields(type_id: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for field in get_type_fields(type_id):
+        if field.get("csv"):
+            out.append(dict(field))
+    return out
+
+
 def normalize_type_properties(type_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
     cleaned = dict(properties or {})
     fields = get_type_fields(type_id)
+    alias_to_key: Dict[str, str] = {}
+    for field in fields:
+        key = field["key"]
+        for alias in field.get("legacy_keys", []):
+            alias_to_key[str(alias)] = key
+    for alias, key in alias_to_key.items():
+        if key in cleaned:
+            continue
+        if alias in cleaned:
+            cleaned[key] = cleaned.get(alias)
+    for alias in alias_to_key:
+        cleaned.pop(alias, None)
+
     for field in fields:
         key = field["key"]
         if key not in cleaned:
@@ -273,4 +321,3 @@ def normalize_type_properties(type_id: str, properties: Dict[str, Any]) -> Dict[
         decimals = max(0, len(str(step).split(".")[1]) if "." in str(step) else 0)
         cleaned[key] = round(snapped, decimals)
     return cleaned
-

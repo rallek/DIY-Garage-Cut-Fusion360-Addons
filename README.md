@@ -224,7 +224,7 @@ Datei:
 Zweck:
 
 - Definiert verfuegbare Katalog-Typen.
-- Definiert optionale typspezifische Felder (z. B. `default_trim_allowance_mm`, `thickness_mm`).
+- Definiert optionale typspezifische Felder (z. B. `sheet_default_trim_allowance`, `edge_thickness`).
 - Steuert, welche dieser Felder in der CSV-Spalte `attributes` zusaetzlich ausgegeben werden.
 
 Hinweis:

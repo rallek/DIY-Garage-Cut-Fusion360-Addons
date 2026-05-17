@@ -9,17 +9,20 @@
       },
       "fields": [
         {
-          "key": "default_trim_allowance_mm",
+          "key": "sheet_default_trim_allowance",
           "kind": "number",
           "labels": {
-            "de": "Standard-Fräszugabe (mm)",
-            "en": "Default trim allowance (mm)"
+            "de": "Standard-Fräszugabe",
+            "en": "Default trim allowance"
           },
           "min": 0.0,
           "max": 5.0,
           "step": 0.1,
           "default": 0.0,
-          "csv": true
+          "csv": true,
+          "quantity": "length",
+          "storage_unit": "mm",
+          "legacy_keys": ["default_trim_allowance_mm"]
         }
       ]
     },
@@ -39,17 +42,20 @@
       },
       "fields": [
         {
-          "key": "thickness_mm",
+          "key": "edge_thickness",
           "kind": "number",
           "labels": {
-            "de": "Materialdicke (mm)",
-            "en": "Thickness (mm)"
+            "de": "Materialdicke",
+            "en": "Edge thickness"
           },
           "min": 0.0,
           "max": 10.0,
           "step": 0.1,
           "default": 0.0,
-          "csv": true
+          "csv": true,
+          "quantity": "length",
+          "storage_unit": "mm",
+          "legacy_keys": ["thickness_mm"]
         }
       ]
     },

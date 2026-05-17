@@ -4,7 +4,7 @@ import csv
 import re
 
 import export_config as config
-from shared.catalog import get_csv_field_keys, load_catalog
+from shared.catalog import get_csv_fields, load_catalog
 
 _handlers = []
 _active_panel_id = None
@@ -239,9 +239,18 @@ def _collect_catalog_csv_entries(attributes, catalog):
         f"DIYGarageCut.catalog:item_type={item.type}",
         f"DIYGarageCut.catalog:item_name={item.name}",
     ]
-    for key in get_csv_field_keys(item.type):
+    for field in get_csv_fields(item.type):
+        key = field.get("key")
+        if not key:
+            continue
         if key in (item.properties or {}):
             entries.append(f"DIYGarageCut.catalog:{key}={item.properties.get(key)}")
+            unit = (field.get("storage_unit") or "").strip()
+            if unit:
+                entries.append(f"DIYGarageCut.catalog:{key}_unit={unit}")
+    doc_unit = _get_document_length_unit()
+    if doc_unit:
+        entries.append(f"DIYGarageCut.context:document_length_unit={doc_unit}")
     return entries
 
 
@@ -311,6 +320,19 @@ def _try_load_catalog():
     except Exception as exc:
         print(f"CSV-Export: Catalog konnte nicht geladen werden: {exc}")
         return None
+
+
+def _get_document_length_unit():
+    try:
+        app = adsk.core.Application.get()
+        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+        units = getattr(design, "unitsManager", None) if design else None
+        if not units:
+            return ""
+        default_units = getattr(units, "defaultLengthUnits", None)
+        return str(default_units or "").strip()
+    except Exception:
+        return ""
 
 
 def _get_or_create_panel(workspace):

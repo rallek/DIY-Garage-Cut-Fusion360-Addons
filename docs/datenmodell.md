@@ -49,7 +49,7 @@ Regel:
 
 ```json
 {
-  "default_trim_allowance_mm": 0.0
+  "sheet_default_trim_allowance": 0.0
 }
 ```
 
@@ -61,7 +61,7 @@ Bereich:
 
 ```json
 {
-  "thickness_mm": 0.0
+  "edge_thickness": 0.0
 }
 ```
 
@@ -128,5 +128,6 @@ Typspezifische Felder aus dem Katalog werden in der Spalte `attributes` ergänzt
 
 ```text
 DIYGarageCut.catalog:item_id=sheet.mdf
-DIYGarageCut.catalog:default_trim_allowance_mm=0.5
+DIYGarageCut.catalog:sheet_default_trim_allowance=0.5
+DIYGarageCut.catalog:sheet_default_trim_allowance_unit=mm
 ```

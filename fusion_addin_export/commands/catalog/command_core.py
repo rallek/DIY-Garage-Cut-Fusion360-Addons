@@ -16,6 +16,7 @@ import export_config as config
 from shared.catalog import (
     Catalog,
     CatalogItem,
+    get_all_type_field_alias_keys,
     get_all_type_field_keys,
     get_catalog_types,
     get_type_default_properties,
@@ -323,6 +324,8 @@ def _save_from_inputs(inputs):
 
     for known_key in get_all_type_field_keys():
         base_properties.pop(known_key, None)
+    for legacy_key in get_all_type_field_alias_keys():
+        base_properties.pop(legacy_key, None)
     base_properties.update(form.get("type_properties", {}))
     base_properties = normalize_type_properties(form["type"], base_properties)
     base_properties.update(_build_appearance_metadata(form["appearance"], appearance_obj))
