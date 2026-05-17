@@ -1,89 +1,73 @@
-
 # Workflow
 
-## Ziel
-
-Möglichst einfacher und schneller Möbelbau-Workflow in Fusion 360.
-
----
+Stand: 2026-05-17 18:45 UTC
 
 # Konstruktion
 
-Der Anwender konstruiert Möbelteile normal in Fusion 360.
-
-Empfehlung:
-- lokale Orientierung konsistent halten
-- Bauteile möglichst sauber ausrichten
+Body modellieren.
 
 ---
 
-# Materialzuweisung
+# Material
 
-Das technische Material wird als Physical Material gesetzt.
+Im Properties-Addin:
+- Material wählen
+- Fräszulage prüfen/anpassen
 
-Beispiele:
-- MDF
-- Multiplex
-- Massivholz
-
----
-
-# Kanten definieren
-
-Der Anwender weist Seitenflächen spezielle Appearances zu.
-
-Beispiele:
-- EDGE_ABS_1
-- EDGE_ABS_2
-- EDGE_WOOD
+Appearance wird gesetzt.
 
 ---
 
-# Furniere definieren
+# Kanten
 
-Große Flächen können Furnier- oder HPL-Appearances erhalten.
+Festlegen:
+- long_side oder short_side
+
+Optional:
+- Richtung tauschen
+
+Dann:
+- vorne
+- hinten
+- links
+- rechts
+
+mit Kantenmaterial belegen.
 
 ---
 
-# Zusatzinformationen
+# Hinweise
 
-Über das Add-in werden zusätzliche Informationen gespeichert:
-- Maserungsrichtung
-- Notizen
-- Fertigungshinweise
+Freitext:
+- lackieren
+- ölen
+- furnieren
 - Sonderbearbeitung
 
 ---
 
-# CSV-Export
+# Export ausschließen
 
-Das Exportskript:
-- analysiert Bodies
-- bestimmt Bounding Boxen
-- erkennt Maße
-- liest Material
-- liest Appearances
-- liest Attributes
-- exportiert CSV
+Nicht relevante Bodies markieren:
+- Hilfsgeometrie
+- Vorrichtungen
+- temporäre Bodies
 
 ---
 
-# Weiterverarbeitung
+# Analyse
 
-Die CSV-Datei wird:
-- in Zuschnittsoftware importiert
-- gemappt
-- kalkuliert
-- optimiert
+Export-Addin prüft:
+- Eigenschaften vollständig
+- oder ausgeschlossen
 
 ---
 
-# Arbeitsweise im Repo
+# Export
 
-Zusätzlich zum fachlichen Workflow gilt:
+CSV exportieren.
 
-- jedes Thema startet als GitHub-Issue
-- jedes Issue hat einen eigenen Thread
-- jedes Issue bekommt einen eigenen Pull Request
-- `main` wird nur über Pull Requests geändert
-- offene Fragen werden im Issue gesammelt, nicht verteilt
+DIY Garage Cut übernimmt:
+- Rohmaße
+- Optimierung
+- Labels

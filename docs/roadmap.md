@@ -1,53 +1,38 @@
-
 # Roadmap
+
+Stand: 2026-05-17 18:45 UTC
 
 # V1
 
-## Ziel
-Minimal funktionierender Workflow.
-
-## Features
+- Basisexport
+- Bounding Box
 - Attribute speichern
-- CSV exportieren
-- Bounding Box auswerten
-- Material exportieren
-- Appearances auslesen
 
 ---
 
 # V2
 
-## Ziel
-Verbesserte Benutzerführung.
-
-## Features
-- bessere UI
-- Appearance-Templates
-- automatische Erkennung typischer Flächen
-- Validierung
+- catalog.json
+- Materialtypen
+- Fräszulage
+- Kantenmodell
+- Analyse
+- Exportprüfung
+- Mehrfachbearbeitung
 
 ---
 
 # V3
 
-## Ziel
-Erweiterte Fertigungslogik.
-
-## Features
-- Bearbeitungsgruppen
+- Katalogexport
+- bessere Analyse
+- Fertigungsgruppen
 - CNC-Hinweise
-- Bohrbilder
-- Sonderbearbeitung
 
 ---
 
 # V4
 
-## Ziel
-Öffentliche Veröffentlichung.
-
-## Features
-- Dokumentation
-- Beispielprojekte
+- Veröffentlichung
 - Installer
-- Open-Source-Release
+- Beispieldateien

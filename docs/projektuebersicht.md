@@ -1,54 +1,36 @@
-# Projektuebersicht
+# Projektübersicht
 
-Dieses Dokument sammelt die projektrelevanten Inhalte in komprimierter Form, damit README und technische Doku getrennt bleiben.
+Stand: 2026-05-17 18:45 UTC
 
-## Einordnung
+## Ziel
 
-Dieses Repository heißt `DIY Garage Cut Fusion360 Addons` und ist ein Unterrepo von `DIY Garage Cut`.
+Fusion-360-Addins für DIY Garage Cut.
 
-Es enthält die Fusion-360-bezogenen Bausteine für:
+Fusion liefert:
+- Geometrie
+- Fertigmaße
+- Fertigungsmetadaten
 
-- Modellmetadaten
-- Fertigungshinweise
-- Bekantung und Oberflächenlogik
-- CSV-Export für externe Zuschnittsoftware
+DIY Garage Cut verarbeitet:
+- Rohmaße
+- Zuschnitt
+- Kantenbedarf
+- Labels
+- QR-Codes
 
-## Zielgruppe
+## Addins
 
-Dieses Repo richtet sich an:
+| Addin | Zweck |
+|---|---|
+| DIYGarageCutExportAddin | Export + Analyse + Katalog |
+| DIYGarageCutPropertiesAddin | Body-Eigenschaften |
 
-- den Architekten des Projekts
-- zukünftige Mitwirkende
-- spätere Nutzer, die das Add-in einsetzen oder erweitern möchten
+## Führende Dokumente
 
-## Fachliche Leitidee
-
-Fusion 360 bleibt das CAD-System.
-
-Die eigentliche Zuschnitt- und Produktionslogik bleibt bewusst außerhalb von Fusion und wird über CSV an externe Werkzeuge übergeben.
-
-## Technische Leitplanken
-
-- Windows als primäre Laufzeitumgebung
-- Fusion 360 in der frei verfügbaren Version
-- Python als derzeit bevorzugte Add-in-Technologie
-- GitHub als zentrale Arbeits- und Dokumentationsbasis
-
-## Inhaltliche Bausteine
-
-- Physical Material für den Werkstoff
-- Appearance für Kanten, Oberflächen und Fertigungszuordnung
-- Attributes für Zusatzinformationen und Exportsteuerung
-
-## Arbeitsregeln
-
-- ein Issue pro Thema
-- ein Thread pro Issue
-- ein Pull Request pro Issue
-- kein direkter Zugriff auf `main`
-- Entscheidungen zuerst im Issue festhalten
-
-## Verknüpfung zum Hauptprojekt
-
-Dieses Repo liefert die Fusion-360-Seite zum Hauptprojekt `DIY Garage Cut`.
-Änderungen hier sollten immer auf ein Ziel im Hauptprojekt oder auf eine klar abgegrenzte technische Aufgabe zurückführbar sein.
+| Thema | Dokument |
+|---|---|
+| Architektur | architektur.md |
+| Datenmodell | datenmodell.md |
+| Workflow | workflow.md |
+| Anforderungen | lastenheft.md |
+| Planung | roadmap.md |

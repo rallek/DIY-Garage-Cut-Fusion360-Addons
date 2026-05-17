@@ -1,73 +1,71 @@
-
 # Lastenheft
 
-## Projektziel
+Stand: 2026-05-17 18:45 UTC
 
-Entwicklung eines Fusion-360-Add-ins zur Unterstützung des Möbelbaus mit Plattenmaterialien und Konstruktionsvollholz.
+# Anforderungen
 
-Das System soll Fertigungsinformationen direkt im CAD-Modell speichern und per CSV exportieren.
+## Properties-Addin
 
-## Hauptanforderungen
+Muss:
+- Material zuweisen
+- Fräszulage speichern
+- Kanten speichern
+- Hinweise speichern
+- Export ausschließen
 
-### 1. Metadatenverwaltung
+---
 
-Das Add-in soll ermöglichen:
+## Katalog
 
-- Bauteile auswählen
-- Fertigungsinformationen speichern
-- Informationen dauerhaft im Modell hinterlegen
+Gemeinsames:
 
-## 2. Kantenlogik
+```text
+catalog.json
+```
 
-Bekantung soll über Appearances definiert werden.
+Typen:
+- sheet
+- bar
+- edge
+- profile
+- hardware
+- consumable
 
-Beispiele:
-- EDGE_ABS_1
-- EDGE_ABS_2
-- EDGE_WOOD
+---
 
-Die Information soll flächenbezogen gespeichert werden.
+## Kantenmodell
 
-## 3. Oberflächenlogik
+Explizite Felder:
 
-Furniere und Beschichtungen sollen ebenfalls über Appearances definiert werden.
+```text
+edge_front
+edge_back
+edge_left
+edge_right
+```
 
-Beispiele:
-- VENEER_OAK
-- VENEER_WALNUT
-- HPL_WHITE
+Keine Appearance-Erkennung.
 
-## 4. Kommentare und Fertigungshinweise
+---
 
-Zusätzliche Informationen sollen als Attributes gespeichert werden.
+## Export
 
-Beispiele:
-- gemeinsam bearbeiten
-- Lochbild erzeugen
-- CNC-Hinweise
-- Sonderbearbeitung
+Muss exportieren:
+- Maße
+- Material
+- Kanten
+- Hinweise
 
-## 5. CSV-Export
+Muss prüfen:
+- vollständig
+- oder ausgeschlossen
 
-Das System soll:
-- alle relevanten Bodies analysieren
-- Bounding Boxen bestimmen
-- Maße exportieren
-- Materialinformationen exportieren
-- Appearance-Informationen exportieren
-- Attribute exportieren
-
-## 6. Zielsystem
-
-Die CSV-Dateien werden in externe Zuschnittsoftware importiert.
-
-Das Importsystem ist flexibel und unterstützt Mapping.
+---
 
 ## Nicht-Ziele
 
-Nicht Bestandteil der ersten Version:
-- automatische Verschachtelung
-- CAM-Generierung
-- ERP-Funktionen
-- automatische CNC-Erkennung
-- Cloud-Synchronisation
+Keine:
+- Optimierung
+- CAM
+- CNC-Automatik
+- QR-Erzeugung
