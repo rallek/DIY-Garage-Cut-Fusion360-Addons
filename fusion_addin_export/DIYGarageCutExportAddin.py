@@ -1,5 +1,5 @@
 import adsk.core
-import importlib.util
+import importlib
 import os
 import sys
 import traceback
@@ -14,12 +14,8 @@ def _load_command_module():
     global _COMMAND_MODULE
     if _COMMAND_MODULE:
         return _COMMAND_MODULE
-    module_path = os.path.join(_ADDIN_DIR, "commands", "command_core.py")
-    spec = importlib.util.spec_from_file_location("diygc_export_command_core", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    _COMMAND_MODULE = module
-    return module
+    _COMMAND_MODULE = importlib.import_module("commands.command_core")
+    return _COMMAND_MODULE
 
 
 def run(context):
