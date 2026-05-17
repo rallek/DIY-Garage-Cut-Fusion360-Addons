@@ -1,4 +1,5 @@
 import adsk.core
+import adsk.fusion
 
 import export_config as config
 from shared.catalog import CATALOG_TYPES, CatalogItem, CatalogLoadError, load_catalog, save_catalog, upsert_catalog_item
@@ -13,6 +14,7 @@ _INPUT_ID = "diygc_catalog_id"
 _INPUT_TYPE = "diygc_catalog_type"
 _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
+_INPUT_APPEARANCE_PICK = "diygc_catalog_appearance_pick"
 _INPUT_NEW_ENTRY = "diygc_catalog_new_entry"
 _INPUT_LIST = "diygc_catalog_list"
 
@@ -42,10 +44,17 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             type_input.listItems.add(item_type, i == 0)
 
         inputs.addStringValueInput(_INPUT_NAME, "Name", "")
+        appearance_pick = inputs.addDropDownCommandInput(
+            _INPUT_APPEARANCE_PICK,
+            "Appearance aus Fusion",
+            adsk.core.DropDownStyles.TextListDropDownStyle,
+        )
+        appearance_pick.listItems.add("(Keine Auswahl)", True)
         inputs.addStringValueInput(_INPUT_APPEARANCE, "Appearance", "")
         list_box = inputs.addTextBoxCommandInput(_INPUT_LIST, "Kataloguebersicht", "-", 12, True)
         list_box.isFullWidth = True
 
+        _populate_appearance_items(appearance_pick)
         _populate_existing_items(selection)
         _refresh_list_overview(inputs)
         _sync_inputs(inputs)
@@ -176,12 +185,17 @@ def _sync_inputs(inputs):
         _set_dropdown(inputs, _INPUT_TYPE, selected_item.type)
         _set_string(inputs, _INPUT_NAME, selected_item.name)
         _set_string(inputs, _INPUT_APPEARANCE, selected_item.appearance)
+        _set_appearance_selection(inputs, selected_item.appearance)
     elif selected_item and is_new_mode:
         _set_string(inputs, _INPUT_ID, "")
         _set_string(inputs, _INPUT_NAME, "")
         _set_string(inputs, _INPUT_APPEARANCE, "")
+        _set_appearance_selection(inputs, "")
     elif not selected_item:
         _set_bool(inputs, _INPUT_NEW_ENTRY, True)
+        _set_appearance_selection(inputs, _read_string(inputs, _INPUT_APPEARANCE))
+
+    _sync_appearance_text_from_dropdown(inputs)
 
     _refresh_list_overview(inputs)
 
@@ -246,6 +260,86 @@ def _set_dropdown(inputs, input_id, wanted):
         if (item.name or "").strip().lower() == wanted_norm:
             item.isSelected = True
             return
+
+
+def _populate_appearance_items(dropdown):
+    seen = set()
+    names = []
+
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+    if design:
+        try:
+            appearances = getattr(design, "appearances", None)
+            count = appearances.count if appearances else 0
+            for i in range(count):
+                entry = appearances.item(i)
+                if not entry or not entry.name:
+                    continue
+                name = str(entry.name).strip()
+                if not name:
+                    continue
+                norm = name.lower()
+                if norm in seen:
+                    continue
+                seen.add(norm)
+                names.append(name)
+        except Exception as exc:
+            print(f"Catalog: Design-Appearances konnten nicht gelesen werden: {exc}")
+
+    if app:
+        try:
+            libs = getattr(app, "materialLibraries", None)
+            lib_count = libs.count if libs else 0
+            for li in range(lib_count):
+                library = libs.item(li)
+                if not library:
+                    continue
+                appearances = getattr(library, "appearances", None)
+                app_count = appearances.count if appearances else 0
+                for ai in range(app_count):
+                    entry = appearances.item(ai)
+                    if not entry or not entry.name:
+                        continue
+                    name = str(entry.name).strip()
+                    if not name:
+                        continue
+                    norm = name.lower()
+                    if norm in seen:
+                        continue
+                    seen.add(norm)
+                    names.append(name)
+        except Exception as exc:
+            print(f"Catalog: Library-Appearances konnten nicht gelesen werden: {exc}")
+
+    for name in sorted(names, key=lambda x: x.lower()):
+        dropdown.listItems.add(name, False)
+
+
+def _set_appearance_selection(inputs, appearance_name):
+    pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PICK))
+    if not pick or pick.listItems.count < 1:
+        return
+    wanted = (appearance_name or "").strip().lower()
+    if not wanted:
+        pick.listItems.item(0).isSelected = True
+        return
+    for i in range(pick.listItems.count):
+        item = pick.listItems.item(i)
+        if (item.name or "").strip().lower() == wanted:
+            item.isSelected = True
+            return
+    pick.listItems.item(0).isSelected = True
+
+
+def _sync_appearance_text_from_dropdown(inputs):
+    pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE_PICK))
+    text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_APPEARANCE))
+    if not pick or not text or not pick.selectedItem:
+        return
+    selected_name = (pick.selectedItem.name or "").strip()
+    if selected_name and selected_name != "(Keine Auswahl)":
+        text.value = selected_name
 
 
 def _get_or_create_panel(workspace):
