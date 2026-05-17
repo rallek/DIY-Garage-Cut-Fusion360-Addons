@@ -124,7 +124,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                         _set_status(inputs, f"Fehler beim Speichern: {exc}")
                 return
 
-            _sync_inputs(inputs)
+            _sync_inputs(inputs, changed_id=changed_id)
         except Exception as exc:
             print(f"Catalog-InputChanged-Fehler: {exc}")
 
@@ -205,7 +205,7 @@ def _refresh_selection_after_save(inputs, selected_id):
     _populate_existing_items(selection, selected_id=selected_id)
 
 
-def _sync_inputs(inputs):
+def _sync_inputs(inputs, changed_id=None):
     global _is_syncing, _last_selection_label
     _is_syncing = True
     try:
@@ -227,7 +227,13 @@ def _sync_inputs(inputs):
             is_new_mode = True
             _set_bool(inputs, _INPUT_NEW_ENTRY, True)
 
-        if selected_item and not is_new_mode:
+        should_reload_from_catalog = (
+            selected_item
+            and not is_new_mode
+            and changed_id in (None, _INPUT_SELECTION, _INPUT_NEW_ENTRY)
+        )
+
+        if should_reload_from_catalog:
             _set_dropdown(inputs, _INPUT_TYPE, selected_item.type)
             _set_string(inputs, _INPUT_NAME, selected_item.name)
             _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
@@ -342,27 +348,51 @@ def _refresh_appearance_preview(inputs):
     if not image_input:
         return
 
-    appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
-    if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
-        image_input.imageFile = _ensure_preview_png("none", (160, 160, 160))
-        _set_preview_hint(inputs, "")
-        return
+    try:
+        appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
+        if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
+            _set_preview_image_safe(
+                inputs,
+                image_input,
+                _ensure_preview_png("none", (160, 160, 160)),
+                "",
+            )
+            return
 
-    appearance = _find_appearance_by_name(appearance_name)
-    texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
-    if texture_file:
-        image_input.imageFile = texture_file
-        _set_preview_hint(inputs, "Vorschau: Texture-Bild")
-        return
+        appearance = _find_appearance_by_name(appearance_name)
+        texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
+        if texture_file and texture_file.lower().endswith(".png"):
+            if _set_preview_image_safe(inputs, image_input, texture_file, "Vorschau: Texture-Bild"):
+                return
 
-    color = _extract_color_from_appearance(appearance) if appearance else None
-    if color is None:
-        color = (110, 130, 170)
-    if appearance and _appearance_has_texture(appearance):
-        _set_preview_hint(inputs, "Hinweis: Texture vorhanden, aber API-Pfad nicht lesbar (Farb-Fallback).")
-    else:
-        _set_preview_hint(inputs, "Vorschau: Farb-Fallback")
-    image_input.imageFile = _ensure_preview_png(_slugify(appearance_name), color)
+        color = _extract_color_from_appearance(appearance) if appearance else None
+        if color is None:
+            color = (110, 130, 170)
+        if appearance and _appearance_has_texture(appearance):
+            hint = "Hinweis: Texture nicht als PNG verfuegbar (Farb-Fallback)."
+        else:
+            hint = "Vorschau: Farb-Fallback"
+        _set_preview_image_safe(
+            inputs,
+            image_input,
+            _ensure_preview_png(_slugify(appearance_name), color),
+            hint,
+        )
+    except Exception as exc:
+        fallback = _ensure_preview_png("preview_error", (160, 160, 160))
+        _set_preview_image_safe(inputs, image_input, fallback, f"Hinweis: Vorschaufehler ({exc})")
+
+
+def _set_preview_image_safe(inputs, image_input, path, hint):
+    try:
+        if not path or not os.path.exists(path):
+            return False
+        image_input.imageFile = path
+        _set_preview_hint(inputs, hint)
+        return True
+    except Exception as exc:
+        _set_preview_hint(inputs, f"Hinweis: Preview konnte nicht gesetzt werden ({exc})")
+        return False
 
 
 def _appearance_has_texture(appearance):
