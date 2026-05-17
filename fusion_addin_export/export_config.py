@@ -16,3 +16,8 @@ COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_ExportCommand"
 COMMAND_NAME = "DIY Garage Cut Export"
 COMMAND_TOOLTIP = "Exportiert sichtbare Bodies als CSV-Datei."
 COMMAND_RESOURCES = "./Resources"
+
+CATALOG_COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_CatalogCommand"
+CATALOG_COMMAND_NAME = "DIYGC Katalog"
+CATALOG_COMMAND_TOOLTIP = "Material-/Artikelkatalog anzeigen und pflegen."
+CATALOG_COMMAND_RESOURCES = "./Resources"
