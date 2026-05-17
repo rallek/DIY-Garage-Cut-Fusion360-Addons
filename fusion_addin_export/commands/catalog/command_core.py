@@ -29,6 +29,7 @@ _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
 _INPUT_APPEARANCE_PREVIEW = "diygc_catalog_appearance_preview"
 _INPUT_PREVIEW_HINT = "diygc_catalog_preview_hint"
+_INPUT_PREVIEW_DEBUG = "diygc_catalog_preview_debug"
 _INPUT_SAVE = "diygc_catalog_save"
 _INPUT_STATUS = "diygc_catalog_status"
 _INPUT_LIST = "diygc_catalog_list"
@@ -97,6 +98,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         preview.isFullWidth = True
         preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
         preview_hint.isFullWidth = True
+        preview_debug = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_DEBUG, "Preview-Debug", "", 8, True)
+        preview_debug.isFullWidth = True
 
         inputs.addBoolValueInput(_INPUT_SAVE, "Speichern", False, "", False)
         status = inputs.addTextBoxCommandInput(_INPUT_STATUS, "", "", 2, True)
@@ -379,6 +382,7 @@ def _refresh_appearance_preview(inputs):
         appearance_name = _read_dropdown(inputs, _INPUT_APPEARANCE)
         if not appearance_name or appearance_name == _APPEARANCE_NONE_LABEL:
             _set_preview_hint(inputs, "")
+            _set_preview_debug(inputs, "No appearance selected.")
             browser_input.htmlFileURL = _build_preview_html_url(
                 _ensure_preview_png("none", (160, 160, 160)),
                 "Keine Auswahl",
@@ -387,9 +391,11 @@ def _refresh_appearance_preview(inputs):
 
         appearance = _find_appearance_by_name(appearance_name)
         texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
+        tint = _extract_tint_color_from_appearance(appearance)
+        tint_alpha = _estimate_tint_alpha(appearance, tint)
+        _set_preview_debug(inputs, _build_preview_debug_text(appearance_name, appearance, texture_file, tint, tint_alpha))
+
         if texture_file and os.path.exists(texture_file):
-            tint = _extract_tint_color_from_appearance(appearance)
-            tint_alpha = _estimate_tint_alpha(appearance, tint)
             _set_preview_hint(inputs, "Vorschau: Texture-Bild")
             browser_input.htmlFileURL = _build_preview_html_url(
                 texture_file,
@@ -414,6 +420,7 @@ def _refresh_appearance_preview(inputs):
     except Exception as exc:
         fallback = _ensure_preview_png("preview_error", (160, 160, 160))
         _set_preview_hint(inputs, f"Hinweis: Vorschaufehler ({exc})")
+        _set_preview_debug(inputs, f"Preview exception: {exc}")
         try:
             browser_input.htmlFileURL = _build_preview_html_url(fallback, "Preview-Fehler")
         except Exception:
@@ -743,6 +750,77 @@ def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
+
+
+def _set_preview_debug(inputs, message):
+    box = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_DEBUG))
+    if box:
+        box.text = message or ""
+
+
+def _build_preview_debug_text(appearance_name, appearance, texture_file, tint_rgb, tint_alpha):
+    lines = []
+    lines.append(f"appearance={appearance_name}")
+    lines.append(f"found={bool(appearance)}")
+    lines.append(f"texture_file={texture_file or '-'}")
+    lines.append(f"texture_exists={bool(texture_file and os.path.exists(texture_file))}")
+    lines.append(f"hasTexture={_appearance_has_texture(appearance) if appearance else False}")
+    lines.append(f"tint_rgb={tint_rgb or '-'}")
+    lines.append(f"tint_alpha={f'{tint_alpha:.4f}' if isinstance(tint_alpha, float) else '-'}")
+    lines.append(f"tint_enabled={_is_tint_enabled(appearance) if appearance else False}")
+    explicit = _extract_tint_amount(appearance) if appearance else None
+    lines.append(f"tint_amount_explicit={f'{explicit:.4f}' if isinstance(explicit, float) else '-'}")
+    color = _extract_color_from_appearance(appearance) if appearance else None
+    lines.append(f"base_color={color or '-'}")
+    for prop_line in _collect_appearance_property_debug_lines(appearance):
+        lines.append(prop_line)
+    return "\n".join(lines)
+
+
+def _collect_appearance_property_debug_lines(appearance, max_lines=18):
+    if not appearance:
+        return []
+    out = ["-- matched properties --"]
+    tokens = ("tint", "ton", "beiz", "stain", "dye", "color", "rough", "texture", "bild", "bitmap", "base")
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        taken = 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+            name = (getattr(prop, "name", "") or "").strip()
+            lname = name.lower()
+            if not any(t in lname for t in tokens):
+                continue
+            obj_type = getattr(prop, "objectType", "") or ""
+            val = _property_debug_value(prop)
+            out.append(f"{name} [{obj_type.split('::')[-1]}] = {val}")
+            taken += 1
+            if taken >= max_lines:
+                break
+    except Exception as exc:
+        out.append(f"debug-prop-read-error: {exc}")
+    return out
+
+
+def _property_debug_value(prop):
+    try:
+        obj_type = getattr(prop, "objectType", "") or ""
+        value = getattr(prop, "value", None)
+        if "ColorProperty" in obj_type and value:
+            return f"RGB({getattr(value, 'red', 0)},{getattr(value, 'green', 0)},{getattr(value, 'blue', 0)})"
+        if "FloatProperty" in obj_type and value is not None:
+            return f"{float(value):.6f}"
+        if "BoolProperty" in obj_type or "BooleanProperty" in obj_type:
+            return str(bool(value))
+        text = str(value)
+        if len(text) > 120:
+            text = text[:117] + "..."
+        return text
+    except Exception as exc:
+        return f"<err:{exc}>"
 
 
 def _build_preview_html_url(image_path, title, tint_rgb=None, tint_alpha=None):
