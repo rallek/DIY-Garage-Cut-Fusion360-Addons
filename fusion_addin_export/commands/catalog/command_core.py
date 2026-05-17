@@ -6,6 +6,7 @@ import tempfile
 import urllib.parse
 import zlib
 import json
+import colorsys
 
 import adsk.core
 import adsk.fusion
@@ -388,8 +389,14 @@ def _refresh_appearance_preview(inputs):
         texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
         if texture_file and os.path.exists(texture_file):
             tint = _extract_tint_color_from_appearance(appearance)
+            tint_alpha = _estimate_tint_alpha(appearance, tint)
             _set_preview_hint(inputs, "Vorschau: Texture-Bild")
-            browser_input.htmlFileURL = _build_preview_html_url(texture_file, appearance_name, tint_rgb=tint)
+            browser_input.htmlFileURL = _build_preview_html_url(
+                texture_file,
+                appearance_name,
+                tint_rgb=tint,
+                tint_alpha=tint_alpha,
+            )
             return
 
         color = _extract_color_from_appearance(appearance) if appearance else None
@@ -665,20 +672,88 @@ def _extract_tint_color_from_appearance(appearance):
     return fallback
 
 
+def _estimate_tint_alpha(appearance, tint_rgb):
+    if not appearance or not tint_rgb:
+        return None
+
+    if not _is_tint_enabled(appearance):
+        return 0.0
+
+    explicit = _extract_tint_amount(appearance)
+    if explicit is not None:
+        return _clamp(0.0, 1.0, explicit)
+
+    r, g, b = [channel / 255.0 for channel in tint_rgb]
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    alpha = 0.35 + (0.55 * s) + (0.15 * (1.0 - v))
+    return _clamp(0.20, 0.95, alpha)
+
+
+def _is_tint_enabled(appearance):
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+            obj_type = getattr(prop, "objectType", "") or ""
+            if "BoolProperty" not in obj_type and "BooleanProperty" not in obj_type:
+                continue
+            name = (getattr(prop, "name", "") or "").strip().lower()
+            if not any(token in name for token in ("tint", "ton", "beiz", "stain", "dye")):
+                continue
+            return bool(getattr(prop, "value", False))
+    except Exception:
+        return True
+    return True
+
+
+def _extract_tint_amount(appearance):
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+            obj_type = getattr(prop, "objectType", "") or ""
+            if "FloatProperty" not in obj_type:
+                continue
+            name = (getattr(prop, "name", "") or "").strip().lower()
+            if not any(token in name for token in ("tint", "ton", "beiz", "stain", "dye", "amount", "strength", "intensity", "menge")):
+                continue
+            try:
+                value = float(getattr(prop, "value", 0.0))
+            except Exception:
+                continue
+            if value > 1.0:
+                value = value / 100.0
+            return _clamp(0.0, 1.0, value)
+    except Exception:
+        return None
+    return None
+
+
+def _clamp(min_value, max_value, value):
+    return max(min_value, min(max_value, value))
+
+
 def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
 
 
-def _build_preview_html_url(image_path, title, tint_rgb=None):
+def _build_preview_html_url(image_path, title, tint_rgb=None, tint_alpha=None):
     os.makedirs(_preview_html_dir, exist_ok=True)
     img_uri = pathlib.Path(image_path).as_uri() if image_path and os.path.exists(image_path) else ""
     safe_title = _escape_html(title or "")
     tint_style = ""
-    if tint_rgb is not None:
+    if tint_rgb is not None and (tint_alpha is None or tint_alpha > 0.0):
         r, g, b = tint_rgb
-        tint_style = f"<div class='tint' style='background: rgba({r},{g},{b},0.35);'></div>"
+        alpha = _clamp(0.0, 1.0, 0.35 if tint_alpha is None else tint_alpha)
+        tint_style = f"<div class='tint' style='background: rgba({r},{g},{b},{alpha:.4f});'></div>"
     html = f"""<!doctype html>
 <html>
 <head>
@@ -690,7 +765,7 @@ def _build_preview_html_url(image_path, title, tint_rgb=None):
       display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
     }}
     img {{ width: 100%; height: 100%; object-fit: cover; }}
-    .tint {{ position: absolute; inset: 0; mix-blend-mode: multiply; pointer-events: none; }}
+    .tint {{ position: absolute; inset: 0; mix-blend-mode: color; pointer-events: none; }}
     .cap {{ margin-top: 6px; color: #444; font-size: 11px; }}
   </style>
 </head>
