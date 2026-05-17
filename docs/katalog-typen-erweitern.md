@@ -13,7 +13,11 @@ catalog_type_config.json
 ## Prinzip
 
 - Jeder Typ hat eine `id`, mehrsprachige `labels` und optional `fields`.
-- Felder sind aktuell vom Typ `number`.
+- Erlaubte `kind`-Werte sind:
+  - `number`
+  - `string`
+  - `boolean`
+  - `enum`
 - Feld-Keys sind fachlich eindeutig und **ohne Einheit im Namen**.
 - Einheit wird separat über `storage_unit` gepflegt (z. B. `mm`).
 
@@ -55,7 +59,12 @@ Beispiel eines Typs:
 - `fields`: zusätzliche typ-spezifische Felder
 - `key`: interner Feldname (stabil, eindeutig, ohne Einheit im Key)
 - `kind`: aktuell `number`
+- `kind`: einer von `number | string | boolean | enum`
 - `min`, `max`, `step`, `default`: Wertebereich und Schrittweite
+- Bei `number`: `min`, `max`, `step`, `default`
+- Bei `string`: optional `min_length`, `max_length`, `default`
+- Bei `boolean`: `default` (`true`/`false`)
+- Bei `enum`: `options` (Liste) und `default`
 - `csv`: wenn `true`, wird Feld beim Export in `attributes` ergänzt
 - `quantity`: fachliche Größe (z. B. `length`)
 - `storage_unit`: kanonische Speichereinheit (aktuell meist `mm`)

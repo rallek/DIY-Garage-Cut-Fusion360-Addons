@@ -44,6 +44,7 @@ Regel:
 - Einheiten stehen in der Typ-Konfiguration (`storage_unit`, z. B. `mm`), nicht im Key.
 - Katalogwerte werden intern in einer kanonischen Einheit gespeichert (aktuell Länge: `mm`).
 - CSV gibt Einheit explizit mit aus (`..._unit`), zusätzlich kann die Fusion-Dokumenteinheit ausgegeben werden.
+- Erlaubte `kind`-Werte: `number`, `string`, `boolean`, `enum`.
 
 ### Standard: sheet
 

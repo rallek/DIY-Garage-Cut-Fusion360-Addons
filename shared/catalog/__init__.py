@@ -2,6 +2,7 @@ from .loader import CatalogLoadError, load_catalog, save_catalog, upsert_catalog
 from .models import Catalog, CatalogItem, CATALOG_TYPES
 from .filtering import filter_items_by_type
 from .type_config import (
+    SUPPORTED_FIELD_KINDS,
     get_all_type_field_alias_keys,
     get_all_type_field_keys,
     get_catalog_types,

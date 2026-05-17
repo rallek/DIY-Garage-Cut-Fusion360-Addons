@@ -2,6 +2,8 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Optional, Set
 
+SUPPORTED_FIELD_KINDS = frozenset({"number", "string", "boolean", "enum"})
+
 
 _DEFAULT_TYPE_CONFIG = {
     "version": 1,
@@ -90,20 +92,11 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not key:
         return None
     kind = str(raw.get("kind", "")).strip().lower()
-    if kind != "number":
+    if kind not in SUPPORTED_FIELD_KINDS:
         return None
     labels = raw.get("labels")
     if not isinstance(labels, dict):
         labels = {}
-    min_value = _to_float(raw.get("min"), 0.0)
-    max_value = _to_float(raw.get("max"), min_value)
-    if max_value < min_value:
-        max_value = min_value
-    step = _to_float(raw.get("step"), 0.1)
-    if step <= 0.0:
-        step = 0.1
-    default = _to_float(raw.get("default"), min_value)
-    default = max(min_value, min(max_value, default))
     legacy_keys_raw = raw.get("legacy_keys")
     legacy_keys: List[str] = []
     if isinstance(legacy_keys_raw, list):
@@ -113,19 +106,72 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 legacy_keys.append(key_name)
     quantity = str(raw.get("quantity", "number") or "number").strip().lower()
     storage_unit = str(raw.get("storage_unit", "") or "").strip()
-    return {
+    result = {
         "key": key,
-        "kind": "number",
+        "kind": kind,
         "labels": {"de": str(labels.get("de", key)), "en": str(labels.get("en", key))},
-        "min": min_value,
-        "max": max_value,
-        "step": step,
-        "default": default,
         "csv": bool(raw.get("csv", False)),
         "quantity": quantity,
         "storage_unit": storage_unit,
         "legacy_keys": legacy_keys,
     }
+    if kind == "number":
+        min_value = _to_float(raw.get("min"), 0.0)
+        max_value = _to_float(raw.get("max"), min_value)
+        if max_value < min_value:
+            max_value = min_value
+        step = _to_float(raw.get("step"), 0.1)
+        if step <= 0.0:
+            step = 0.1
+        default = _to_float(raw.get("default"), min_value)
+        default = max(min_value, min(max_value, default))
+        result.update(
+            {
+                "min": min_value,
+                "max": max_value,
+                "step": step,
+                "default": default,
+            }
+        )
+        return result
+
+    if kind == "string":
+        min_length = int(_to_float(raw.get("min_length"), 0.0))
+        max_length = int(_to_float(raw.get("max_length"), 1024.0))
+        if max_length < min_length:
+            max_length = min_length
+        default = str(raw.get("default", ""))
+        if len(default) < min_length:
+            default = default + (" " * (min_length - len(default)))
+        if len(default) > max_length:
+            default = default[:max_length]
+        result.update(
+            {
+                "min_length": min_length,
+                "max_length": max_length,
+                "default": default,
+            }
+        )
+        return result
+
+    if kind == "boolean":
+        result.update({"default": bool(raw.get("default", False))})
+        return result
+
+    options_raw = raw.get("options")
+    options: List[str] = []
+    if isinstance(options_raw, list):
+        for entry in options_raw:
+            text = str(entry or "").strip()
+            if text and text not in options:
+                options.append(text)
+    if not options:
+        options = ["value"]
+    default = str(raw.get("default", options[0]))
+    if default not in options:
+        default = options[0]
+    result.update({"options": options, "default": default})
+    return result
 
 
 def _normalize_type(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -304,20 +350,55 @@ def normalize_type_properties(type_id: str, properties: Dict[str, Any]) -> Dict[
         key = field["key"]
         if key not in cleaned:
             continue
-        if field["kind"] != "number":
-            continue
         value = cleaned.get(key)
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"'{key}' must be numeric.") from exc
-        min_value = float(field["min"])
-        max_value = float(field["max"])
-        if numeric < min_value or numeric > max_value:
-            raise ValueError(f"'{key}' must be between {min_value:g} and {max_value:g}.")
-        step = float(field["step"])
-        rounded_steps = round((numeric - min_value) / step)
-        snapped = min_value + rounded_steps * step
-        decimals = max(0, len(str(step).split(".")[1]) if "." in str(step) else 0)
-        cleaned[key] = round(snapped, decimals)
+        kind = field["kind"]
+        if kind == "number":
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"'{key}' must be numeric.") from exc
+            min_value = float(field["min"])
+            max_value = float(field["max"])
+            if numeric < min_value or numeric > max_value:
+                raise ValueError(f"'{key}' must be between {min_value:g} and {max_value:g}.")
+            step = float(field["step"])
+            rounded_steps = round((numeric - min_value) / step)
+            snapped = min_value + rounded_steps * step
+            decimals = max(0, len(str(step).split(".")[1]) if "." in str(step) else 0)
+            cleaned[key] = round(snapped, decimals)
+            continue
+
+        if kind == "string":
+            text = str(value or "")
+            min_length = int(field.get("min_length", 0))
+            max_length = int(field.get("max_length", 1024))
+            if len(text) < min_length:
+                raise ValueError(f"'{key}' is too short.")
+            if len(text) > max_length:
+                raise ValueError(f"'{key}' is too long.")
+            cleaned[key] = text
+            continue
+
+        if kind == "boolean":
+            if isinstance(value, bool):
+                cleaned[key] = value
+            elif isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in ("true", "1", "yes", "ja"):
+                    cleaned[key] = True
+                elif lowered in ("false", "0", "no", "nein"):
+                    cleaned[key] = False
+                else:
+                    raise ValueError(f"'{key}' must be boolean.")
+            else:
+                cleaned[key] = bool(value)
+            continue
+
+        if kind == "enum":
+            options = list(field.get("options", []))
+            candidate = str(value or "")
+            if candidate not in options:
+                raise ValueError(f"'{key}' must be one of: {', '.join(options)}.")
+            cleaned[key] = candidate
+            continue
     return cleaned

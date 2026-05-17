@@ -63,6 +63,7 @@ _baseline_snapshot = None
 _last_selection_label = None
 _type_field_ids = {}
 _type_field_label_ids = {}
+_type_field_meta_by_key = {}
 _label_counter = 0
 
 _STRINGS = {
@@ -123,7 +124,7 @@ _STRINGS = {
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
-        global _ui_lang, _copy_mode, _baseline_snapshot, _selected_item_id, _last_selection_label, _type_field_ids, _type_field_label_ids, _label_counter
+        global _ui_lang, _copy_mode, _baseline_snapshot, _selected_item_id, _last_selection_label, _type_field_ids, _type_field_label_ids, _type_field_meta_by_key, _label_counter
         _ui_lang = _detect_ui_lang()
         _copy_mode = False
         _baseline_snapshot = None
@@ -131,6 +132,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         _last_selection_label = None
         _type_field_ids = {}
         _type_field_label_ids = {}
+        _type_field_meta_by_key = {}
         _label_counter = 0
 
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
@@ -928,9 +930,10 @@ def _extract_tint_amount(appearance):
 
 
 def _add_type_specific_field_inputs(inputs):
-    global _type_field_ids, _type_field_label_ids
+    global _type_field_ids, _type_field_label_ids, _type_field_meta_by_key
     _type_field_ids = {}
     _type_field_label_ids = {}
+    _type_field_meta_by_key = {}
     for type_id in _sorted_types():
         fields = get_type_fields(type_id)
         for field in fields:
@@ -939,19 +942,51 @@ def _add_type_specific_field_inputs(inputs):
                 continue
             input_id = f"{_INPUT_TYPE_FIELD_PREFIX}{field_key}"
             _type_field_ids[field_key] = input_id
+            _type_field_meta_by_key[field_key] = dict(field)
             label = _add_field_label(inputs, _field_label(field))
             _type_field_label_ids[field_key] = label.id if label else None
-            spinner = inputs.addFloatSpinnerCommandInput(
-                input_id,
-                "",
-                "mm",
-                _mm_to_internal_length(float(field.get("min", 0.0))),
-                _mm_to_internal_length(float(field.get("max", 0.0))),
-                _mm_to_internal_length(float(field.get("step", 0.1))),
-                _mm_to_internal_length(float(field.get("default", 0.0))),
-            )
-            _try_set_full_width(spinner)
-            spinner.isVisible = False
+
+            kind = field.get("kind")
+            ctrl = None
+            if kind == "number":
+                unit = str(field.get("storage_unit", "") or "")
+                if str(field.get("quantity", "") or "").strip().lower() == "length":
+                    min_value = _to_internal_value(float(field.get("min", 0.0)), unit)
+                    max_value = _to_internal_value(float(field.get("max", 0.0)), unit)
+                    step = _to_internal_value(float(field.get("step", 0.1)), unit)
+                    default = _to_internal_value(float(field.get("default", 0.0)), unit)
+                else:
+                    min_value = float(field.get("min", 0.0))
+                    max_value = float(field.get("max", 0.0))
+                    step = float(field.get("step", 0.1))
+                    default = float(field.get("default", 0.0))
+                ctrl = inputs.addFloatSpinnerCommandInput(
+                    input_id,
+                    "",
+                    unit,
+                    min_value,
+                    max_value,
+                    step,
+                    default,
+                )
+            elif kind == "string":
+                ctrl = inputs.addStringValueInput(input_id, "", str(field.get("default", "")))
+            elif kind == "boolean":
+                ctrl = inputs.addBoolValueInput(input_id, "", True, "", bool(field.get("default", False)))
+            elif kind == "enum":
+                dd = inputs.addDropDownCommandInput(
+                    input_id,
+                    "",
+                    adsk.core.DropDownStyles.TextListDropDownStyle,
+                )
+                options = list(field.get("options", []))
+                default_value = str(field.get("default", options[0] if options else ""))
+                for option in options:
+                    dd.listItems.add(str(option), str(option) == default_value)
+                ctrl = dd
+            if ctrl:
+                _try_set_full_width(ctrl)
+                ctrl.isVisible = False
             if label:
                 label.isVisible = False
 
@@ -984,10 +1019,29 @@ def _read_type_specific_values(inputs, type_id):
         input_id = _type_field_ids.get(key)
         if not input_id:
             continue
-        spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
-        if not spinner:
+        kind = field.get("kind")
+        if kind == "number":
+            spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
+            if not spinner:
+                continue
+            value = float(spinner.value)
+            unit = str(field.get("storage_unit", "") or "")
+            if str(field.get("quantity", "") or "").strip().lower() == "length":
+                value = _from_internal_value(value, unit)
+            values[key] = value
             continue
-        values[key] = _internal_to_mm_length(float(spinner.value))
+        if kind == "string":
+            item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
+            values[key] = (item.value or "") if item else ""
+            continue
+        if kind == "boolean":
+            item = adsk.core.BoolValueCommandInput.cast(inputs.itemById(input_id))
+            values[key] = bool(item.value) if item else False
+            continue
+        if kind == "enum":
+            dd = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
+            values[key] = (dd.selectedItem.name or "") if dd and dd.selectedItem else ""
+            continue
     return values
 
 
@@ -1002,14 +1056,44 @@ def _set_type_specific_form_values(inputs, type_id, properties):
         input_id = _type_field_ids.get(key)
         if not input_id:
             continue
-        spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
-        if not spinner:
-            continue
         value = source.get(key, field.get("default", 0.0))
-        try:
-            spinner.value = _mm_to_internal_length(float(value))
-        except Exception:
-            spinner.value = _mm_to_internal_length(float(field.get("default", 0.0)))
+        kind = field.get("kind")
+        if kind == "number":
+            spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
+            if not spinner:
+                continue
+            try:
+                numeric = float(value)
+            except Exception:
+                numeric = float(field.get("default", 0.0))
+            if str(field.get("quantity", "") or "").strip().lower() == "length":
+                numeric = _to_internal_value(numeric, str(field.get("storage_unit", "") or ""))
+            spinner.value = numeric
+            continue
+        if kind == "string":
+            item = adsk.core.StringValueCommandInput.cast(inputs.itemById(input_id))
+            if item:
+                item.value = str(value or "")
+            continue
+        if kind == "boolean":
+            item = adsk.core.BoolValueCommandInput.cast(inputs.itemById(input_id))
+            if item:
+                item.value = bool(value)
+            continue
+        if kind == "enum":
+            dd = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
+            if not dd:
+                continue
+            wanted = str(value or field.get("default", "")).strip().lower()
+            hit = False
+            for i in range(dd.listItems.count):
+                option = dd.listItems.item(i)
+                if (option.name or "").strip().lower() == wanted:
+                    option.isSelected = True
+                    hit = True
+                    break
+            if not hit and dd.listItems.count > 0:
+                dd.listItems.item(0).isSelected = True
 
 
 def _apply_type_defaults_to_inputs(inputs, type_id):
@@ -1331,28 +1415,32 @@ def _clamp(min_value, max_value, value):
     return max(min_value, min(max_value, value))
 
 
-def _mm_to_internal_length(mm_value):
+def _to_internal_value(value, unit_name):
     try:
         app = adsk.core.Application.get()
         design = adsk.fusion.Design.cast(app.activeProduct) if app else None
         units = getattr(design, "unitsManager", None) if design else None
         if units:
-            return float(units.convert(float(mm_value), "mm", units.internalUnits))
+            return float(units.convert(float(value), unit_name, units.internalUnits))
     except Exception:
         pass
-    return float(mm_value) / 10.0
+    if str(unit_name).strip().lower() == "mm":
+        return float(value) / 10.0
+    return float(value)
 
 
-def _internal_to_mm_length(internal_value):
+def _from_internal_value(value, unit_name):
     try:
         app = adsk.core.Application.get()
         design = adsk.fusion.Design.cast(app.activeProduct) if app else None
         units = getattr(design, "unitsManager", None) if design else None
         if units:
-            return float(units.convert(float(internal_value), units.internalUnits, "mm"))
+            return float(units.convert(float(value), units.internalUnits, unit_name))
     except Exception:
         pass
-    return float(internal_value) * 10.0
+    if str(unit_name).strip().lower() == "mm":
+        return float(value) * 10.0
+    return float(value)
 
 
 def _detect_ui_lang():
