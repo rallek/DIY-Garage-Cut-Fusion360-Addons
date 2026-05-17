@@ -6,6 +6,8 @@ import re
 import export_config as config
 from shared.catalog import get_csv_fields, load_catalog
 
+_ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
+
 _handlers = []
 _active_panel_id = None
 _is_started = False
@@ -109,7 +111,7 @@ def _append_component_bodies(component, rows, seen_tokens, catalog):
         for body in component.bRepBodies:
             _append_body_row_if_visible(body, rows, seen_tokens, catalog)
     except Exception as exc:
-        print(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}")
+        raise RuntimeError(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
 def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog):
@@ -122,9 +124,9 @@ def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog)
                     _append_body_row_if_visible(body, rows, seen_tokens, catalog)
                 _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens, catalog)
             except Exception as exc:
-                print(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}")
+                raise RuntimeError(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}") from exc
     except Exception as exc:
-        print(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}")
+        raise RuntimeError(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}") from exc
 
 
 def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
@@ -139,7 +141,8 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
         seen_tokens.add(token)
         rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
-        print(f"CSV-Export: Body uebersprungen: {exc}")
+        body_name = _safe_body_name(body)
+        raise RuntimeError(f"CSV-Export: Body '{body_name}' konnte nicht exportiert werden: {exc}") from exc
 
 
 def _body_to_csv_row(body, catalog):
@@ -200,8 +203,7 @@ def _collect_attributes_as_text(body, catalog):
             entries.append(f"{group}:{name}={value}")
         entries.extend(_collect_catalog_csv_entries(attrs, catalog))
     except Exception as exc:
-        print(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}")
-        return "-"
+        raise RuntimeError(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}") from exc
     return ";".join(entries) if entries else "-"
 
 
@@ -229,8 +231,10 @@ def _collect_body_attributes(body):
 def _collect_catalog_csv_entries(attributes, catalog):
     if not catalog:
         return []
-    material_id = _resolve_catalog_material_id(attributes)
+    material_id, source = _resolve_catalog_material_id(attributes)
     if not material_id:
+        return []
+    if source == "material_typ":
         return []
     item = catalog.get(material_id)
     if not item:
@@ -257,14 +261,26 @@ def _collect_catalog_csv_entries(attributes, catalog):
 
 def _resolve_catalog_material_ref(body, catalog):
     if not catalog:
-        return "-", "-"
+        raise ValueError("Catalog nicht geladen.")
+    body_name = _safe_body_name(body)
     attributes = _collect_body_attributes(body)
-    material_id = _resolve_catalog_material_id(attributes)
+    material_id, source = _resolve_catalog_material_id(attributes)
     if not material_id:
-        return "-", "-"
+        raise ValueError(
+            f"Body '{body_name}' hat keine 'material_id' im Attribut-Set "
+            f"('{_ATTRIBUTE_GROUP}:material_id')."
+        )
+    if source == "material_typ":
+        raise ValueError(
+            f"Body '{body_name}' verwendet Legacy-Key 'material_typ' ohne kanonische 'material_id'. "
+            "Bitte Daten auf 'material_id' migrieren."
+        )
     item = catalog.get(material_id)
     if not item:
-        return material_id, "-"
+        raise ValueError(
+            f"Body '{body_name}' referenziert material_id '{material_id}', "
+            "die nicht in catalog.json existiert."
+        )
     return item.id, item.type
 
 
@@ -286,9 +302,9 @@ def _resolve_catalog_material_id(attributes):
             continue
         for group, value in entries:
             if group == "DIYGarageCut.part_metadata":
-                return value
-        return entries[0][1]
-    return None
+                return value, key
+        return entries[0][1], key
+    return None, None
 
 
 def _write_csv(path, rows):
@@ -357,8 +373,7 @@ def _try_load_catalog():
     try:
         return load_catalog()
     except Exception as exc:
-        print(f"CSV-Export: Catalog konnte nicht geladen werden: {exc}")
-        return None
+        raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
 
 
 def _get_document_length_unit():
