@@ -66,7 +66,7 @@ _label_counter = 0
 
 _STRINGS = {
     "de": {
-        "existing_entries": "Eintrag",
+        "existing_entries": "Material",
         "create_new": "(Neu anlegen)",
         "copy_entry": "Als neuen Eintrag speichern",
         "delete_entry": "Eintrag löschen",
@@ -92,7 +92,7 @@ _STRINGS = {
         "appearance_none": "(Bitte wählen)",
     },
     "en": {
-        "existing_entries": "Entry",
+        "existing_entries": "Material",
         "create_new": "(Create new)",
         "copy_entry": "Save as new entry",
         "delete_entry": "Delete entry",
@@ -199,8 +199,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
         copy_btn.isFullWidth = False
 
-        _add_field_label(inputs, _t("delete_entry"))
-        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, "", False, "", False)
+        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, _t("delete_entry"), False, "", False)
         delete_btn.isFullWidth = False
         delete_btn.isEnabled = False
 
@@ -478,7 +477,7 @@ def _populate_existing_items(dropdown, selected_id=None):
     dropdown.listItems.add(create_new_label, selected_id is None)
 
     catalog = _load_catalog_data()
-    for item in sorted(catalog.items, key=lambda x: x.id.lower()):
+    for item in sorted(catalog.items, key=lambda x: ((x.name or "").lower(), _type_label(x.type).lower(), (x.id or "").lower())):
         label = f"{item.name} [{_type_label(item.type)}]"
         if label in _selection_id_by_label:
             label = f"{label} · {item.id}"
@@ -943,10 +942,10 @@ def _add_type_specific_field_inputs(inputs):
                 input_id,
                 "",
                 "mm",
-                float(field.get("min", 0.0)),
-                float(field.get("max", 0.0)),
-                float(field.get("step", 0.1)),
-                float(field.get("default", 0.0)),
+                _mm_to_internal_length(float(field.get("min", 0.0))),
+                _mm_to_internal_length(float(field.get("max", 0.0))),
+                _mm_to_internal_length(float(field.get("step", 0.1))),
+                _mm_to_internal_length(float(field.get("default", 0.0))),
             )
             _try_set_full_width(spinner)
             spinner.isVisible = False
@@ -985,7 +984,7 @@ def _read_type_specific_values(inputs, type_id):
         spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
         if not spinner:
             continue
-        values[key] = float(spinner.value)
+        values[key] = _internal_to_mm_length(float(spinner.value))
     return values
 
 
@@ -1005,9 +1004,9 @@ def _set_type_specific_form_values(inputs, type_id, properties):
             continue
         value = source.get(key, field.get("default", 0.0))
         try:
-            spinner.value = float(value)
+            spinner.value = _mm_to_internal_length(float(value))
         except Exception:
-            spinner.value = float(field.get("default", 0.0))
+            spinner.value = _mm_to_internal_length(float(field.get("default", 0.0)))
 
 
 def _apply_type_defaults_to_inputs(inputs, type_id):
@@ -1327,6 +1326,30 @@ def _sorted_types():
 
 def _clamp(min_value, max_value, value):
     return max(min_value, min(max_value, value))
+
+
+def _mm_to_internal_length(mm_value):
+    try:
+        app = adsk.core.Application.get()
+        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+        units = getattr(design, "unitsManager", None) if design else None
+        if units:
+            return float(units.convert(float(mm_value), "mm", units.internalUnits))
+    except Exception:
+        pass
+    return float(mm_value) / 10.0
+
+
+def _internal_to_mm_length(internal_value):
+    try:
+        app = adsk.core.Application.get()
+        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+        units = getattr(design, "unitsManager", None) if design else None
+        if units:
+            return float(units.convert(float(internal_value), units.internalUnits, "mm"))
+    except Exception:
+        pass
+    return float(internal_value) * 10.0
 
 
 def _detect_ui_lang():
