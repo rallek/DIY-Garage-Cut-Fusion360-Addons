@@ -13,16 +13,18 @@ import adsk.core
 import adsk.fusion
 
 import export_config as config
-from shared.catalog import CATALOG_TYPES, CatalogItem, load_catalog, save_catalog, upsert_catalog_item
+from shared.catalog import CATALOG_TYPES, Catalog, CatalogItem, load_catalog, save_catalog, upsert_catalog_item
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
 _is_syncing = False
+_reopen_after_save = False
 
 _INPUT_SELECTION = "diygc_catalog_selection"
 _INPUT_COPY = "diygc_catalog_copy"
+_INPUT_DELETE = "diygc_catalog_delete"
 _INPUT_TYPE = "diygc_catalog_type"
 _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
@@ -51,6 +53,7 @@ _STRINGS = {
         "existing_entries": "Eintrag",
         "create_new": "(Neu anlegen)",
         "copy_entry": "Als neuen Eintrag speichern",
+        "delete_entry": "Eintrag löschen",
         "type": "Typ",
         "name": "Name",
         "appearance": "Darstellung",
@@ -58,6 +61,10 @@ _STRINGS = {
         "preview": "Vorschau",
         "save": "Speichern",
         "status_saved": "Änderungen gespeichert.",
+        "status_deleted": "Eintrag gelöscht.",
+        "status_delete_requires_existing": "Fehler: Löschen nur bei bestehendem Eintrag möglich.",
+        "confirm_delete_title": "Eintrag löschen",
+        "confirm_delete_body": "Diesen Eintrag wirklich löschen?",
         "status_invalid_type": "Fehler: Bitte gültigen Typ wählen.",
         "status_invalid_name": "Fehler: Name darf nicht leer sein.",
         "status_invalid_appearance": "Fehler: Bitte Darstellung auswählen.",
@@ -78,6 +85,7 @@ _STRINGS = {
         "existing_entries": "Entry",
         "create_new": "(Create new)",
         "copy_entry": "Save as new entry",
+        "delete_entry": "Delete entry",
         "type": "Type",
         "name": "Name",
         "appearance": "Appearance",
@@ -85,6 +93,10 @@ _STRINGS = {
         "preview": "Preview",
         "save": "Save",
         "status_saved": "Changes saved.",
+        "status_deleted": "Entry deleted.",
+        "status_delete_requires_existing": "Error: Delete is only possible for existing entries.",
+        "confirm_delete_title": "Delete entry",
+        "confirm_delete_body": "Delete this entry?",
         "status_invalid_type": "Error: Please select a valid type.",
         "status_invalid_name": "Error: Name cannot be empty.",
         "status_invalid_appearance": "Error: Please select an appearance.",
@@ -130,6 +142,14 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             cmd.okButtonText = _t("save")
         except Exception:
             pass
+        try:
+            cmd.setDialogInitialSize(560, 520)
+        except Exception:
+            pass
+        try:
+            cmd.setDialogMinimumSize(500, 420)
+        except Exception:
+            pass
 
         _add_field_label(inputs, _t("existing_entries"))
         selection = inputs.addDropDownCommandInput(
@@ -143,6 +163,11 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         _add_field_label(inputs, _t("copy_entry"))
         copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
         copy_btn.isFullWidth = False
+
+        _add_field_label(inputs, _t("delete_entry"))
+        delete_btn = inputs.addBoolValueInput(_INPUT_DELETE, "", False, "", False)
+        delete_btn.isFullWidth = False
+        delete_btn.isEnabled = False
 
         _add_field_label(inputs, _t("type"))
         type_input = inputs.addDropDownCommandInput(
@@ -198,6 +223,10 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         cmd.execute.add(on_execute)
         _handlers.append(on_execute)
 
+        on_destroy = _CommandDestroyHandler()
+        cmd.destroy.add(on_destroy)
+        _handlers.append(on_destroy)
+
 
 class _InputChangedHandler(adsk.core.InputChangedEventHandler):
     def notify(self, args):
@@ -213,6 +242,11 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             changed_id = changed.id if changed else ""
+            if changed_id == _INPUT_DELETE:
+                if _read_bool(inputs, _INPUT_DELETE, False):
+                    _set_bool(inputs, _INPUT_DELETE, False)
+                    _delete_selected_entry(inputs)
+                return
 
             _sync_inputs(inputs, changed_id=changed_id)
         except Exception as exc:
@@ -233,6 +267,7 @@ class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
 
 class _CommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
+        global _reopen_after_save
         try:
             event_args = adsk.core.CommandEventArgs.cast(args)
             command = event_args.command if event_args else None
@@ -240,11 +275,30 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
             if not inputs:
                 return
             _save_from_inputs(inputs)
+            _reopen_after_save = True
         except Exception as exc:
             app = adsk.core.Application.get()
             ui = app.userInterface if app else None
             if ui:
                 ui.messageBox(f"Speichern fehlgeschlagen:\n{exc}")
+
+
+class _CommandDestroyHandler(adsk.core.CommandEventHandler):
+    def notify(self, args):
+        global _reopen_after_save
+        if not _reopen_after_save:
+            return
+        _reopen_after_save = False
+        try:
+            app = adsk.core.Application.get()
+            ui = app.userInterface if app else None
+            if not ui:
+                return
+            cmd_def = ui.commandDefinitions.itemById(config.CATALOG_COMMAND_ID)
+            if cmd_def:
+                cmd_def.execute()
+        except Exception as exc:
+            print(f"Catalog: Reopen nach Speichern fehlgeschlagen: {exc}")
 
 
 def _save_from_inputs(inputs):
@@ -290,6 +344,40 @@ def _save_from_inputs(inputs):
     _sync_inputs(inputs, changed_id=_INPUT_SELECTION)
 
 
+def _delete_selected_entry(inputs):
+    global _selected_item_id, _copy_mode, _baseline_snapshot
+    if _selected_item_id is None:
+        _set_status(inputs, _t("status_delete_requires_existing"))
+        return
+
+    app = adsk.core.Application.get()
+    ui = app.userInterface if app else None
+    if not ui:
+        return
+    result = ui.messageBox(
+        _t("confirm_delete_body"),
+        _t("confirm_delete_title"),
+        adsk.core.MessageBoxButtonTypes.YesNoButtonType,
+        adsk.core.MessageBoxIconTypes.WarningIconType,
+    )
+    if result != adsk.core.DialogResults.DialogYes:
+        return
+
+    catalog = _load_catalog_data()
+    remaining = [item for item in catalog.items if item.id != _selected_item_id]
+    next_catalog = Catalog.build(version=catalog.version, items=remaining)
+    save_catalog(next_catalog)
+
+    _selected_item_id = None
+    _copy_mode = True
+    _baseline_snapshot = None
+    _set_status(inputs, _t("status_deleted"))
+    selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
+    if selection:
+        _populate_existing_items(selection)
+    _sync_inputs(inputs, changed_id=_INPUT_SELECTION)
+
+
 def _sync_inputs(inputs, changed_id=None):
     global _is_syncing, _selected_item_id, _copy_mode, _baseline_snapshot, _last_selection_label
     _is_syncing = True
@@ -319,9 +407,17 @@ def _sync_inputs(inputs, changed_id=None):
                 _set_status(inputs, "")
 
         _refresh_appearance_preview(inputs)
+        _update_delete_state(inputs)
         _last_selection_label = selected_label
     finally:
         _is_syncing = False
+
+
+def _update_delete_state(inputs):
+    delete_btn = adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_DELETE))
+    if not delete_btn:
+        return
+    delete_btn.isEnabled = _selected_item_id is not None and not _read_bool(inputs, _INPUT_COPY, False)
 
 
 def _can_save(inputs):
