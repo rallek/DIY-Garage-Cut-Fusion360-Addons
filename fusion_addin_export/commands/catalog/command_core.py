@@ -262,9 +262,12 @@ def _sync_inputs(inputs, changed_id=None):
             _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
             _set_id_view(inputs, selected_item.id)
         else:
-            current_name = _read_string(inputs, _INPUT_NAME)
-            current_type = _read_dropdown(inputs, _INPUT_TYPE)
-            _set_id_view(inputs, _generate_internal_id(_load_catalog_data(), current_type, current_name))
+            if selected_item and not is_new_mode:
+                _set_id_view(inputs, selected_item.id)
+            else:
+                current_name = _read_string(inputs, _INPUT_NAME)
+                current_type = _read_dropdown(inputs, _INPUT_TYPE)
+                _set_id_view(inputs, _generate_internal_id(_load_catalog_data(), current_type, current_name))
 
         _refresh_appearance_preview(inputs)
         _refresh_list_overview(inputs)
@@ -384,8 +387,9 @@ def _refresh_appearance_preview(inputs):
         appearance = _find_appearance_by_name(appearance_name)
         texture_file = _find_texture_file_for_appearance(appearance) if appearance else None
         if texture_file and os.path.exists(texture_file):
+            tint = _extract_tint_color_from_appearance(appearance)
             _set_preview_hint(inputs, "Vorschau: Texture-Bild")
-            browser_input.htmlFileURL = _build_preview_html_url(texture_file, appearance_name)
+            browser_input.htmlFileURL = _build_preview_html_url(texture_file, appearance_name, tint_rgb=tint)
             return
 
         color = _extract_color_from_appearance(appearance) if appearance else None
@@ -628,16 +632,53 @@ def _extract_color_from_appearance(appearance):
     return None
 
 
+def _extract_tint_color_from_appearance(appearance):
+    if not appearance:
+        return None
+    wanted_tokens = ("tint", "beiz", "abtoen", "abtön", "stain", "dye")
+    fallback = None
+    try:
+        properties = getattr(appearance, "appearanceProperties", None)
+        count = properties.count if properties else 0
+        for i in range(count):
+            prop = properties.item(i)
+            if not prop:
+                continue
+            obj_type = getattr(prop, "objectType", "") or ""
+            if "ColorProperty" not in obj_type:
+                continue
+            color = getattr(prop, "value", None)
+            if not color:
+                continue
+            rgb = (
+                max(0, min(255, int(getattr(color, "red", 0)))),
+                max(0, min(255, int(getattr(color, "green", 0)))),
+                max(0, min(255, int(getattr(color, "blue", 0)))),
+            )
+            prop_name = (getattr(prop, "name", "") or "").strip().lower()
+            if any(token in prop_name for token in wanted_tokens):
+                return rgb
+            if fallback is None:
+                fallback = rgb
+    except Exception:
+        return None
+    return fallback
+
+
 def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
 
 
-def _build_preview_html_url(image_path, title):
+def _build_preview_html_url(image_path, title, tint_rgb=None):
     os.makedirs(_preview_html_dir, exist_ok=True)
     img_uri = pathlib.Path(image_path).as_uri() if image_path and os.path.exists(image_path) else ""
     safe_title = _escape_html(title or "")
+    tint_style = ""
+    if tint_rgb is not None:
+        r, g, b = tint_rgb
+        tint_style = f"<div class='tint' style='background: rgba({r},{g},{b},0.35);'></div>"
     html = f"""<!doctype html>
 <html>
 <head>
@@ -646,14 +687,15 @@ def _build_preview_html_url(image_path, title):
     body {{ margin: 0; padding: 8px; background: #f3f3f3; font-family: Arial, sans-serif; }}
     .box {{
       width: 120px; height: 120px; border: 1px solid #bbb; background: #ddd;
-      display: flex; align-items: center; justify-content: center; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
     }}
     img {{ width: 100%; height: 100%; object-fit: cover; }}
+    .tint {{ position: absolute; inset: 0; mix-blend-mode: multiply; pointer-events: none; }}
     .cap {{ margin-top: 6px; color: #444; font-size: 11px; }}
   </style>
 </head>
 <body>
-  <div class="box">{"<img src='" + img_uri + "' alt='preview' />" if img_uri else ""}</div>
+  <div class="box">{"<img src='" + img_uri + "' alt='preview' />" if img_uri else ""}{tint_style}</div>
   <div class="cap">{safe_title}</div>
 </body>
 </html>
