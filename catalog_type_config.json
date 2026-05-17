@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "types": [
+    {
+      "id": "sheet",
+      "labels": {
+        "de": "Platte",
+        "en": "Sheet"
+      },
+      "fields": [
+        {
+          "key": "sheet_default_trim_allowance",
+          "kind": "number",
+          "labels": {
+            "de": "Standard-Fräszugabe",
+            "en": "Default trim allowance"
+          },
+          "min": 0.0,
+          "max": 5.0,
+          "step": 0.1,
+          "default": 0.0,
+          "csv": true,
+          "quantity": "length",
+          "storage_unit": "mm",
+          "legacy_keys": ["default_trim_allowance_mm"]
+        }
+      ]
+    },
+    {
+      "id": "bar",
+      "labels": {
+        "de": "Stab",
+        "en": "Bar"
+      },
+      "fields": []
+    },
+    {
+      "id": "edge",
+      "labels": {
+        "de": "Kante",
+        "en": "Edge"
+      },
+      "fields": [
+        {
+          "key": "edge_thickness",
+          "kind": "number",
+          "labels": {
+            "de": "Materialdicke",
+            "en": "Edge thickness"
+          },
+          "min": 0.0,
+          "max": 10.0,
+          "step": 0.1,
+          "default": 0.0,
+          "csv": true,
+          "quantity": "length",
+          "storage_unit": "mm",
+          "legacy_keys": ["thickness_mm"]
+        }
+      ]
+    },
+    {
+      "id": "profile",
+      "labels": {
+        "de": "Profil",
+        "en": "Profile"
+      },
+      "fields": []
+    },
+    {
+      "id": "hardware",
+      "labels": {
+        "de": "Beschlag",
+        "en": "Hardware"
+      },
+      "fields": []
+    },
+    {
+      "id": "consumable",
+      "labels": {
+        "de": "Verbrauchsmaterial",
+        "en": "Consumable"
+      },
+      "fields": []
+    }
+  ]
+}

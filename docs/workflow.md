@@ -16,6 +16,10 @@ Im Properties-Addin:
 
 Appearance wird gesetzt.
 
+Im Catalog-Addin:
+- für `sheet`: Standard-Fräszugabe pflegen (0.0 bis 5.0 mm)
+- für `edge`: Materialdicke pflegen (0.0 bis 10.0 mm)
+
 ---
 
 # Kanten

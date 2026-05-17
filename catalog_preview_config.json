@@ -1,0 +1,6 @@
+{
+  "_comment": "Optional: zusaetzliche Suchpfade fuer Texture-Dateien. Umgebungsvariablen werden aufgeloest.",
+  "material_texture_roots": [
+    "%LOCALAPPDATA%\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats"
+  ]
+}

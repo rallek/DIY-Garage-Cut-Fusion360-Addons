@@ -5,8 +5,10 @@ import sys
 import traceback
 
 _ADDIN_DIR = os.path.dirname(os.path.abspath(__file__))
-if _ADDIN_DIR not in sys.path:
-    sys.path.insert(0, _ADDIN_DIR)
+_REPO_ROOT = os.path.dirname(_ADDIN_DIR)
+for _path in (_ADDIN_DIR, _REPO_ROOT):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 _COMMAND_MODULE = None
 
 

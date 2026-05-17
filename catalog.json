@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "sheet.birch_mpx_19",
+      "type": "sheet",
+      "name": "Birke Multiplex 19 mm",
+      "appearance": "Birch",
+      "thickness_mm": 19,
+      "default_trim_allowance_mm": 2
+    },
+    {
+      "id": "bar.spruce_44x44",
+      "type": "bar",
+      "name": "Fichte KVH 44x44",
+      "appearance": "Spruce"
+    },
+    {
+      "id": "edge.abs_white_2",
+      "type": "edge",
+      "name": "ABS Kante Weiss 2 mm",
+      "appearance": "White",
+      "thickness_mm": 2
+    },
+    {
+      "id": "profile.alu_u_20",
+      "type": "profile",
+      "name": "Alu U-Profil 20",
+      "appearance": "Aluminum"
+    },
+    {
+      "id": "hardware.confirmat_7x50",
+      "type": "hardware",
+      "name": "Confirmat 7x50",
+      "appearance": "Zinc"
+    },
+    {
+      "id": "consumable.pu_glue_d4",
+      "type": "consumable",
+      "name": "PU Leim D4",
+      "appearance": "Beige"
+    }
+  ]
+}

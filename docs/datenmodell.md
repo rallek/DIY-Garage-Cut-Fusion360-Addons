@@ -26,22 +26,49 @@ consumable
 }
 ```
 
-## sheet
+## Typ-spezifische Felder (konfigurierbar)
+
+Konfiguration:
+
+```text
+catalog_type_config.json
+```
+
+Regel:
+- Felder werden pro `type` in der Konfiguration definiert.
+- `catalog.json` speichert nur die Felder, die für den jeweiligen Typ relevant sind.
+
+## Vertragsregeln (kurz)
+
+- Feld-Keys sind fachlich eindeutig und ohne Einheit im Namen.
+- Einheiten stehen in der Typ-Konfiguration (`storage_unit`, z. B. `mm`), nicht im Key.
+- Katalogwerte werden intern in einer kanonischen Einheit gespeichert (aktuell Länge: `mm`).
+- CSV gibt Einheit explizit mit aus (`..._unit`), zusätzlich kann die Fusion-Dokumenteinheit ausgegeben werden.
+- Erlaubte `kind`-Werte: `number`, `string`, `boolean`, `enum`.
+
+### Standard: sheet
 
 ```json
 {
-  "thickness_mm": 19,
-  "default_trim_allowance_mm": 2
+  "sheet_default_trim_allowance": 0.0
 }
 ```
 
-## edge
+Bereich:
+- `0.0` bis `5.0`
+- Schrittweite `0.1`
+
+### Standard: edge
 
 ```json
 {
-  "thickness_mm": 2
+  "edge_thickness": 0.0
 }
 ```
+
+Bereich:
+- `0.0` bis `10.0`
+- Schrittweite `0.1`
 
 ---
 
@@ -91,3 +118,17 @@ Kein zusätzliches CSV-Feld.
 
 Nur Visualisierung.
 Nie führende Datenquelle.
+
+---
+
+# CSV-Bezug
+
+CSV-Header bleibt unverändert.
+
+Typspezifische Felder aus dem Katalog werden in der Spalte `attributes` ergänzt, z. B.:
+
+```text
+DIYGarageCut.catalog:item_id=sheet.mdf
+DIYGarageCut.catalog:sheet_default_trim_allowance=0.5
+DIYGarageCut.catalog:sheet_default_trim_allowance_unit=mm
+```
