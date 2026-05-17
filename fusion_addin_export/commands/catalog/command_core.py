@@ -13,7 +13,19 @@ import adsk.core
 import adsk.fusion
 
 import export_config as config
-from shared.catalog import CATALOG_TYPES, Catalog, CatalogItem, load_catalog, save_catalog, upsert_catalog_item
+from shared.catalog import (
+    Catalog,
+    CatalogItem,
+    get_all_type_field_keys,
+    get_catalog_types,
+    get_type_default_properties,
+    get_type_fields,
+    get_type_label,
+    load_catalog,
+    normalize_type_properties,
+    save_catalog,
+    upsert_catalog_item,
+)
 
 _handlers = []
 _active_panel_id = None
@@ -28,6 +40,7 @@ _INPUT_DELETE = "diygc_catalog_delete"
 _INPUT_TYPE = "diygc_catalog_type"
 _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
+_INPUT_TYPE_FIELD_PREFIX = "diygc_catalog_type_field_"
 _INPUT_APPEARANCE_PREVIEW = "diygc_catalog_appearance_preview"
 _INPUT_PREVIEW_HINT = "diygc_catalog_preview_hint"
 _INPUT_STATUS = "diygc_catalog_status"
@@ -47,6 +60,9 @@ _selected_item_id = None
 _copy_mode = False
 _baseline_snapshot = None
 _last_selection_label = None
+_type_field_ids = {}
+_type_field_label_ids = {}
+_label_counter = 0
 
 _STRINGS = {
     "de": {
@@ -74,12 +90,6 @@ _STRINGS = {
         "preview_fallback_color": "Vorschau: Farb-Fallback",
         "preview_error": "Hinweis: Vorschaufehler ({err})",
         "appearance_none": "(Bitte wählen)",
-                "type_sheet": "Platte",
-        "type_bar": "Stab",
-        "type_edge": "Kante",
-        "type_profile": "Profil",
-        "type_hardware": "Beschlag",
-        "type_consumable": "Verbrauchsmaterial",
     },
     "en": {
         "existing_entries": "Entry",
@@ -106,33 +116,21 @@ _STRINGS = {
         "preview_fallback_color": "Preview: color fallback",
         "preview_error": "Hint: preview error ({err})",
         "appearance_none": "(Please select)",
-                "type_sheet": "Sheet",
-        "type_bar": "Bar",
-        "type_edge": "Edge",
-        "type_profile": "Profile",
-        "type_hardware": "Hardware",
-        "type_consumable": "Consumable",
     },
-}
-
-_TYPE_TRANSLATION_KEYS = {
-    "sheet": "type_sheet",
-    "bar": "type_bar",
-    "edge": "type_edge",
-    "profile": "type_profile",
-    "hardware": "type_hardware",
-    "consumable": "type_consumable",
 }
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
-        global _ui_lang, _copy_mode, _baseline_snapshot, _selected_item_id, _last_selection_label
+        global _ui_lang, _copy_mode, _baseline_snapshot, _selected_item_id, _last_selection_label, _type_field_ids, _type_field_label_ids, _label_counter
         _ui_lang = _detect_ui_lang()
         _copy_mode = False
         _baseline_snapshot = None
         _selected_item_id = None
         _last_selection_label = None
+        _type_field_ids = {}
+        _type_field_label_ids = {}
+        _label_counter = 0
 
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
         cmd = event_args.command
@@ -182,6 +180,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         _try_set_full_width(appearance_pick)
         appearance_pick.listItems.add(_t("appearance_none"), True)
+
+        _add_type_specific_field_inputs(inputs)
 
         preview = inputs.addBrowserCommandInput(
             _INPUT_APPEARANCE_PREVIEW,
@@ -322,6 +322,10 @@ def _save_from_inputs(inputs):
         item_id = existing_item.id
         base_properties = dict(existing_item.properties or {})
 
+    for known_key in get_all_type_field_keys():
+        base_properties.pop(known_key, None)
+    base_properties.update(form.get("type_properties", {}))
+    base_properties = normalize_type_properties(form["type"], base_properties)
     base_properties.update(_build_appearance_metadata(form["appearance"], appearance_obj))
     item = CatalogItem.from_dict(
         {
@@ -398,6 +402,7 @@ def _sync_inputs(inputs, changed_id=None):
                 _set_string(inputs, _INPUT_NAME, selected_item.name)
                 _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
                 _set_bool(inputs, _INPUT_COPY, False)
+                _set_type_specific_form_values(inputs, selected_item.type, selected_item.properties or {})
             else:
                 _selected_item_id = None
                 _copy_mode = True
@@ -405,7 +410,12 @@ def _sync_inputs(inputs, changed_id=None):
                 _set_string(inputs, _INPUT_NAME, "")
                 _set_bool(inputs, _INPUT_COPY, False)
                 _set_status(inputs, "")
+                _apply_type_defaults_to_inputs(inputs, _read_type_from_dropdown(inputs))
 
+        if changed_id == _INPUT_TYPE:
+            _apply_type_defaults_to_inputs(inputs, _read_type_from_dropdown(inputs))
+
+        _update_type_specific_field_visibility(inputs, _read_type_from_dropdown(inputs))
         _refresh_appearance_preview(inputs)
         _update_delete_state(inputs)
         _last_selection_label = selected_label
@@ -445,6 +455,13 @@ def _is_candidate_valid(inputs, emit_status):
     if not appearance or appearance == _t("appearance_none"):
         if emit_status:
             _set_status(inputs, _t("status_invalid_appearance"))
+        return False
+    type_values = _read_type_specific_values(inputs, type_id)
+    try:
+        normalize_type_properties(type_id, type_values)
+    except ValueError as exc:
+        if emit_status:
+            _set_status(inputs, f"Fehler: {exc}")
         return False
     return True
 
@@ -491,18 +508,23 @@ def _get_selected_item(inputs):
 
 
 def _item_snapshot(item):
+    type_props = get_type_default_properties(item.type)
+    type_props.update(_extract_type_properties(item.type, item.properties or {}))
     return {
         "type": item.type,
         "name": item.name,
         "appearance": item.appearance,
+        "type_properties": type_props,
     }
 
 
 def _form_snapshot(inputs):
+    type_id = _read_type_from_dropdown(inputs)
     return {
-        "type": _read_type_from_dropdown(inputs),
+        "type": type_id,
         "name": _read_string(inputs, _INPUT_NAME),
         "appearance": _read_dropdown(inputs, _INPUT_APPEARANCE),
+        "type_properties": _read_type_specific_values(inputs, type_id),
     }
 
 
@@ -903,6 +925,110 @@ def _extract_tint_amount(appearance):
     return None
 
 
+def _add_type_specific_field_inputs(inputs):
+    global _type_field_ids, _type_field_label_ids
+    _type_field_ids = {}
+    _type_field_label_ids = {}
+    for type_id in _sorted_types():
+        fields = get_type_fields(type_id)
+        for field in fields:
+            field_key = field.get("key")
+            if not field_key:
+                continue
+            input_id = f"{_INPUT_TYPE_FIELD_PREFIX}{field_key}"
+            _type_field_ids[field_key] = input_id
+            label = _add_field_label(inputs, _field_label(field))
+            _type_field_label_ids[field_key] = label.id if label else None
+            spinner = inputs.addFloatSpinnerCommandInput(
+                input_id,
+                "",
+                "mm",
+                float(field.get("min", 0.0)),
+                float(field.get("max", 0.0)),
+                float(field.get("step", 0.1)),
+                float(field.get("default", 0.0)),
+            )
+            _try_set_full_width(spinner)
+            spinner.isVisible = False
+            if label:
+                label.isVisible = False
+
+
+def _field_label(field):
+    labels = field.get("labels", {})
+    if _ui_lang == "en":
+        return str(labels.get("en", field.get("key", "")))
+    return str(labels.get("de", field.get("key", "")))
+
+
+def _extract_type_properties(type_id, properties):
+    out = {}
+    source = dict(properties or {})
+    for field in get_type_fields(type_id):
+        key = field.get("key")
+        if not key:
+            continue
+        if key in source:
+            out[key] = source[key]
+    return out
+
+
+def _read_type_specific_values(inputs, type_id):
+    values = {}
+    for field in get_type_fields(type_id):
+        key = field.get("key")
+        if not key:
+            continue
+        input_id = _type_field_ids.get(key)
+        if not input_id:
+            continue
+        spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
+        if not spinner:
+            continue
+        values[key] = float(spinner.value)
+    return values
+
+
+def _set_type_specific_form_values(inputs, type_id, properties):
+    defaults = get_type_default_properties(type_id)
+    source = dict(defaults)
+    source.update(_extract_type_properties(type_id, properties))
+    for field in get_type_fields(type_id):
+        key = field.get("key")
+        if not key:
+            continue
+        input_id = _type_field_ids.get(key)
+        if not input_id:
+            continue
+        spinner = adsk.core.FloatSpinnerCommandInput.cast(inputs.itemById(input_id))
+        if not spinner:
+            continue
+        value = source.get(key, field.get("default", 0.0))
+        try:
+            spinner.value = float(value)
+        except Exception:
+            spinner.value = float(field.get("default", 0.0))
+
+
+def _apply_type_defaults_to_inputs(inputs, type_id):
+    if not type_id:
+        return
+    _set_type_specific_form_values(inputs, type_id, {})
+
+
+def _update_type_specific_field_visibility(inputs, type_id):
+    visible_keys = {field.get("key") for field in get_type_fields(type_id)}
+    for field_key, input_id in _type_field_ids.items():
+        ctrl = inputs.itemById(input_id)
+        label_id = _type_field_label_ids.get(field_key)
+        label = inputs.itemById(label_id) if label_id else None
+        should_show = field_key in visible_keys
+        if ctrl:
+            ctrl.isVisible = should_show
+        if label:
+            label.isVisible = should_show
+
+
 def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
@@ -910,7 +1036,9 @@ def _set_preview_hint(inputs, message):
 
 
 def _add_field_label(inputs, text):
-    label_id = f"diygc_lbl_{_slugify(text)}_{len(text)}"
+    global _label_counter
+    _label_counter += 1
+    label_id = f"diygc_lbl_{_slugify(text)}_{_label_counter}"
     lbl = inputs.addTextBoxCommandInput(label_id, "", _escape_html(text), 1, True)
     lbl.isFullWidth = True
     return lbl
@@ -1177,7 +1305,7 @@ def _set_type_dropdown(inputs, type_id):
 
 def _read_type_from_dropdown(inputs):
     display = _read_dropdown(inputs, _INPUT_TYPE).lower()
-    for type_id in CATALOG_TYPES:
+    for type_id in get_catalog_types():
         if display == _type_label(type_id).lower():
             return type_id
     return None
@@ -1190,12 +1318,11 @@ def _set_status(inputs, message):
 
 
 def _type_label(type_id):
-    key = _TYPE_TRANSLATION_KEYS.get(type_id, "")
-    return _t(key) if key else type_id
+    return get_type_label(type_id, _ui_lang)
 
 
 def _sorted_types():
-    return sorted(CATALOG_TYPES)
+    return sorted(get_catalog_types())
 
 
 def _clamp(min_value, max_value, value):
