@@ -145,10 +145,11 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
 def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
     width, height, depth = _get_dimensions_from_bounding_box(body)
+    material_id, material_type = _resolve_catalog_material_ref(body, catalog)
     material_name = _safe_name(getattr(body, "material", None))
     appearance_name = _safe_name(getattr(body, "appearance", None))
     attr_text = _collect_attributes_as_text(body, catalog)
-    return [name, width, height, depth, material_name, appearance_name, attr_text]
+    return [name, width, height, depth, material_id, material_type, material_name, appearance_name, attr_text]
 
 
 def _safe_body_name(body):
@@ -254,6 +255,19 @@ def _collect_catalog_csv_entries(attributes, catalog):
     return entries
 
 
+def _resolve_catalog_material_ref(body, catalog):
+    if not catalog:
+        return "-", "-"
+    attributes = _collect_body_attributes(body)
+    material_id = _resolve_catalog_material_id(attributes)
+    if not material_id:
+        return "-", "-"
+    item = catalog.get(material_id)
+    if not item:
+        return material_id, "-"
+    return item.id, item.type
+
+
 def _resolve_catalog_material_id(attributes):
     # Migration contract: material_id is canonical, material_typ is legacy fallback.
     key_priority = ("material_id", "material_typ")
@@ -278,7 +292,17 @@ def _resolve_catalog_material_id(attributes):
 
 
 def _write_csv(path, rows):
-    header = ["body_name", "width_mm", "height_mm", "depth_mm", "material", "appearance", "attributes"]
+    header = [
+        "body_name",
+        "width_mm",
+        "height_mm",
+        "depth_mm",
+        "material_id",
+        "material_type",
+        "material",
+        "appearance",
+        "attributes",
+    ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(header)
