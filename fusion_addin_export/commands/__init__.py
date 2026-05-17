@@ -1,10 +1,10 @@
-from . import export
+from . import catalog, export
 
 _COMMAND_MODULES = (
+    catalog,
     export,
     # Foundation only: future commands are present but not yet activated.
     # validate,
-    # catalog,
 )
 
 
