@@ -131,31 +131,40 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         except Exception:
             pass
 
+        _add_field_label(inputs, _t("existing_entries"))
         selection = inputs.addDropDownCommandInput(
             _INPUT_SELECTION,
-            _t("existing_entries"),
+            "",
             adsk.core.DropDownStyles.TextListDropDownStyle,
         )
+        _try_set_full_width(selection)
         selection.listItems.add(_t("create_new"), True)
 
-        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, _t("copy_entry"), True, "", False)
+        _add_field_label(inputs, _t("copy_entry"))
+        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, "", True, "", False)
         copy_btn.isFullWidth = False
 
+        _add_field_label(inputs, _t("type"))
         type_input = inputs.addDropDownCommandInput(
             _INPUT_TYPE,
-            _t("type"),
+            "",
             adsk.core.DropDownStyles.TextListDropDownStyle,
         )
+        _try_set_full_width(type_input)
         for idx, type_id in enumerate(_sorted_types()):
             type_input.listItems.add(_type_label(type_id), idx == 0)
 
-        inputs.addStringValueInput(_INPUT_NAME, _t("name"), "")
+        _add_field_label(inputs, _t("name"))
+        name_input = inputs.addStringValueInput(_INPUT_NAME, "", "")
+        _try_set_full_width(name_input)
 
+        _add_field_label(inputs, _t("appearance"))
         appearance_pick = inputs.addDropDownCommandInput(
             _INPUT_APPEARANCE,
-            _t("appearance_from_fusion"),
+            "",
             adsk.core.DropDownStyles.TextListDropDownStyle,
         )
+        _try_set_full_width(appearance_pick)
         appearance_pick.listItems.add(_t("appearance_none"), True)
 
         preview = inputs.addBrowserCommandInput(
@@ -802,6 +811,20 @@ def _set_preview_hint(inputs, message):
     hint = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_PREVIEW_HINT))
     if hint:
         hint.text = message or ""
+
+
+def _add_field_label(inputs, text):
+    label_id = f"diygc_lbl_{_slugify(text)}_{len(text)}"
+    lbl = inputs.addTextBoxCommandInput(label_id, "", _escape_html(text), 1, True)
+    lbl.isFullWidth = True
+    return lbl
+
+
+def _try_set_full_width(input_obj):
+    try:
+        input_obj.isFullWidth = True
+    except Exception:
+        pass
 
 
 def _build_preview_html_url(image_path, title, tint_rgb=None, tint_alpha=None):
