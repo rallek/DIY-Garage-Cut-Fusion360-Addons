@@ -38,6 +38,13 @@ Regel:
 - Felder werden pro `type` in der Konfiguration definiert.
 - `catalog.json` speichert nur die Felder, die für den jeweiligen Typ relevant sind.
 
+## Vertragsregeln (kurz)
+
+- Feld-Keys sind fachlich eindeutig und ohne Einheit im Namen.
+- Einheiten stehen in der Typ-Konfiguration (`storage_unit`, z. B. `mm`), nicht im Key.
+- Katalogwerte werden intern in einer kanonischen Einheit gespeichert (aktuell Länge: `mm`).
+- CSV gibt Einheit explizit mit aus (`..._unit`), zusätzlich kann die Fusion-Dokumenteinheit ausgegeben werden.
+
 ### Standard: sheet
 
 ```json
