@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, List
 
 from .models import Catalog, CatalogItem
 
@@ -53,3 +53,43 @@ def load_catalog(path: str = None) -> Catalog:
 
     return Catalog.build(version=version, items=_parse_items(items_raw))
 
+
+def _catalog_item_to_dict(item: CatalogItem) -> Dict[str, Any]:
+    payload = {
+        "id": item.id,
+        "type": item.type,
+        "name": item.name,
+        "appearance": item.appearance,
+    }
+    if item.properties:
+        payload.update(item.properties)
+    return payload
+
+
+def save_catalog(catalog: Catalog, path: str = None) -> str:
+    catalog_path = path or _default_catalog_path()
+    payload = {
+        "version": int(catalog.version),
+        "items": [_catalog_item_to_dict(item) for item in catalog.items],
+    }
+    try:
+        with open(catalog_path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+    except OSError as exc:
+        raise CatalogLoadError(f"Catalog file write failed: {catalog_path}: {exc}") from exc
+    return catalog_path
+
+
+def upsert_catalog_item(catalog: Catalog, item: CatalogItem) -> Catalog:
+    next_items: List[CatalogItem] = []
+    replaced = False
+    for existing in catalog.items:
+        if existing.id == item.id:
+            next_items.append(item)
+            replaced = True
+            continue
+        next_items.append(existing)
+    if not replaced:
+        next_items.append(item)
+    return Catalog.build(version=catalog.version, items=next_items)
