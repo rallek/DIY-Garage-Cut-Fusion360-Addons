@@ -28,7 +28,6 @@ _INPUT_NAME = "diygc_catalog_name"
 _INPUT_APPEARANCE = "diygc_catalog_appearance"
 _INPUT_APPEARANCE_PREVIEW = "diygc_catalog_appearance_preview"
 _INPUT_PREVIEW_HINT = "diygc_catalog_preview_hint"
-_INPUT_SAVE = "diygc_catalog_save"
 _INPUT_STATUS = "diygc_catalog_status"
 
 _PREVIEW_SIZE = 84
@@ -49,19 +48,16 @@ _last_selection_label = None
 
 _STRINGS = {
     "de": {
-        "close": "Schließen",
-        "existing_entries": "Vorhandene Einträge",
+        "existing_entries": "Eintrag",
         "create_new": "(Neu anlegen)",
-        "copy_entry": "Eintrag kopieren",
+        "copy_entry": "Als neuen Eintrag speichern",
         "type": "Typ",
         "name": "Name",
         "appearance": "Darstellung",
-        "appearance_from_fusion": "Darstellung aus Fusion",
+        "appearance_from_fusion": "Darstellung",
         "preview": "Vorschau",
         "save": "Speichern",
-        "status_saved": "Gespeichert: {id}",
-        "status_no_item_for_copy": "Fehler: Zum Kopieren zuerst einen bestehenden Eintrag wählen.",
-        "status_copy_ready": "Kopie vorbereitet. Name anpassen und speichern.",
+        "status_saved": "Änderungen gespeichert.",
         "status_invalid_type": "Fehler: Bitte gültigen Typ wählen.",
         "status_invalid_name": "Fehler: Name darf nicht leer sein.",
         "status_invalid_appearance": "Fehler: Bitte Darstellung auswählen.",
@@ -71,8 +67,7 @@ _STRINGS = {
         "preview_fallback_color": "Vorschau: Farb-Fallback",
         "preview_error": "Hinweis: Vorschaufehler ({err})",
         "appearance_none": "(Bitte wählen)",
-        "copy_suffix": "Kopie",
-        "type_sheet": "Platte",
+                "type_sheet": "Platte",
         "type_bar": "Stab",
         "type_edge": "Kante",
         "type_profile": "Profil",
@@ -80,19 +75,16 @@ _STRINGS = {
         "type_consumable": "Verbrauchsmaterial",
     },
     "en": {
-        "close": "Close",
-        "existing_entries": "Existing entries",
+        "existing_entries": "Entry",
         "create_new": "(Create new)",
-        "copy_entry": "Copy entry",
+        "copy_entry": "Save as new entry",
         "type": "Type",
         "name": "Name",
         "appearance": "Appearance",
-        "appearance_from_fusion": "Appearance from Fusion",
+        "appearance_from_fusion": "Appearance",
         "preview": "Preview",
         "save": "Save",
-        "status_saved": "Saved: {id}",
-        "status_no_item_for_copy": "Error: Select an existing entry first to copy.",
-        "status_copy_ready": "Copy prepared. Adjust name and save.",
+        "status_saved": "Changes saved.",
         "status_invalid_type": "Error: Please select a valid type.",
         "status_invalid_name": "Error: Name cannot be empty.",
         "status_invalid_appearance": "Error: Please select an appearance.",
@@ -102,8 +94,7 @@ _STRINGS = {
         "preview_fallback_color": "Preview: color fallback",
         "preview_error": "Hint: preview error ({err})",
         "appearance_none": "(Please select)",
-        "copy_suffix": "Copy",
-        "type_sheet": "Sheet",
+                "type_sheet": "Sheet",
         "type_bar": "Bar",
         "type_edge": "Edge",
         "type_profile": "Profile",
@@ -136,7 +127,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         inputs = cmd.commandInputs
 
         try:
-            cmd.okButtonText = _t("close")
+            cmd.okButtonText = _t("save")
         except Exception:
             pass
 
@@ -147,7 +138,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         selection.listItems.add(_t("create_new"), True)
 
-        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, _t("copy_entry"), False, "", False)
+        copy_btn = inputs.addBoolValueInput(_INPUT_COPY, _t("copy_entry"), True, "", False)
         copy_btn.isFullWidth = False
 
         type_input = inputs.addDropDownCommandInput(
@@ -171,16 +162,14 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _INPUT_APPEARANCE_PREVIEW,
             _t("preview"),
             _build_preview_html_url(_ensure_preview_png("none", (160, 160, 160)), _t("preview_none")),
-            130,
-            160,
+            98,
+            126,
         )
         preview.isFullWidth = True
 
         preview_hint = inputs.addTextBoxCommandInput(_INPUT_PREVIEW_HINT, "", "", 1, True)
         preview_hint.isFullWidth = True
 
-        save_btn = inputs.addBoolValueInput(_INPUT_SAVE, _t("save"), False, "", False)
-        save_btn.isEnabled = False
         status = inputs.addTextBoxCommandInput(_INPUT_STATUS, "", "", 2, True)
         status.isFullWidth = True
 
@@ -191,6 +180,10 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         on_input_changed = _InputChangedHandler()
         cmd.inputChanged.add(on_input_changed)
         _handlers.append(on_input_changed)
+
+        on_validate = _ValidateInputsHandler()
+        cmd.validateInputs.add(on_validate)
+        _handlers.append(on_validate)
 
         on_execute = _CommandExecuteHandler()
         cmd.execute.add(on_execute)
@@ -212,39 +205,49 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
 
             changed_id = changed.id if changed else ""
 
-            if changed_id == _INPUT_SAVE:
-                if _read_bool(inputs, _INPUT_SAVE, False):
-                    _set_bool(inputs, _INPUT_SAVE, False)
-                    _save_from_inputs(inputs)
-                return
-
-            if changed_id == _INPUT_COPY:
-                if _read_bool(inputs, _INPUT_COPY, False):
-                    _set_bool(inputs, _INPUT_COPY, False)
-                    _prepare_copy_mode(inputs)
-                return
-
             _sync_inputs(inputs, changed_id=changed_id)
         except Exception as exc:
             _set_status(inputs, f"Input-Fehler: {exc}")
 
 
+class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
+    def notify(self, args):
+        try:
+            event_args = adsk.core.ValidateInputsEventArgs.cast(args)
+            inputs = event_args.inputs if event_args else None
+            if not inputs:
+                return
+            event_args.areInputsValid = _can_save(inputs)
+        except Exception:
+            pass
+
+
 class _CommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
-        return
+        try:
+            event_args = adsk.core.CommandEventArgs.cast(args)
+            command = event_args.command if event_args else None
+            inputs = command.commandInputs if command else None
+            if not inputs:
+                return
+            _save_from_inputs(inputs)
+        except Exception as exc:
+            app = adsk.core.Application.get()
+            ui = app.userInterface if app else None
+            if ui:
+                ui.messageBox(f"Speichern fehlgeschlagen:\n{exc}")
 
 
 def _save_from_inputs(inputs):
     global _selected_item_id, _copy_mode, _baseline_snapshot
-    if not _is_candidate_valid(inputs):
-        _update_save_state(inputs)
+    if not _is_candidate_valid(inputs, emit_status=True):
         return
 
     catalog = _load_catalog_data()
     form = _form_snapshot(inputs)
     appearance_obj = _find_appearance_by_name(form["appearance"])
 
-    is_new = _copy_mode or _selected_item_id is None
+    is_new = _read_bool(inputs, _INPUT_COPY, False) or _selected_item_id is None
     if is_new:
         item_id = _generate_internal_id(catalog, form["type"], form["name"])
         base_properties = {}
@@ -269,32 +272,13 @@ def _save_from_inputs(inputs):
     next_catalog = upsert_catalog_item(catalog, item)
     save_catalog(next_catalog)
 
-    _set_status(inputs, _t("status_saved").format(id=item.id))
+    _set_status(inputs, _t("status_saved"))
     _selected_item_id = item.id
     _copy_mode = False
     _baseline_snapshot = _item_snapshot(item)
+    _set_bool(inputs, _INPUT_COPY, False)
     _refresh_selection_after_save(inputs, item.id)
     _sync_inputs(inputs, changed_id=_INPUT_SELECTION)
-
-
-def _prepare_copy_mode(inputs):
-    global _copy_mode, _selected_item_id, _baseline_snapshot
-    selected_item = _get_selected_item(inputs)
-    if not selected_item:
-        _set_status(inputs, _t("status_no_item_for_copy"))
-        return
-
-    _copy_mode = True
-    _selected_item_id = None
-    _baseline_snapshot = None
-
-    _set_type_dropdown(inputs, selected_item.type)
-    copied_name = f"{selected_item.name} {_t('copy_suffix')}".strip()
-    _set_string(inputs, _INPUT_NAME, copied_name)
-    _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
-    _set_status(inputs, _t("status_copy_ready"))
-    _update_save_state(inputs)
-    _refresh_appearance_preview(inputs)
 
 
 def _sync_inputs(inputs, changed_id=None):
@@ -303,7 +287,6 @@ def _sync_inputs(inputs, changed_id=None):
     try:
         selection = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SELECTION))
         if not selection or not selection.selectedItem:
-            _update_save_state(inputs)
             return
 
         selected_label = selection.selectedItem.name or ""
@@ -317,49 +300,46 @@ def _sync_inputs(inputs, changed_id=None):
                 _set_type_dropdown(inputs, selected_item.type)
                 _set_string(inputs, _INPUT_NAME, selected_item.name)
                 _set_dropdown(inputs, _INPUT_APPEARANCE, selected_item.appearance)
+                _set_bool(inputs, _INPUT_COPY, False)
             else:
                 _selected_item_id = None
                 _copy_mode = True
                 _baseline_snapshot = None
                 _set_string(inputs, _INPUT_NAME, "")
+                _set_bool(inputs, _INPUT_COPY, False)
                 _set_status(inputs, "")
 
         _refresh_appearance_preview(inputs)
-        _update_save_state(inputs)
         _last_selection_label = selected_label
     finally:
         _is_syncing = False
 
 
-def _update_save_state(inputs):
-    save_btn = adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_SAVE))
-    if not save_btn:
-        return
-    save_btn.isEnabled = _can_save(inputs)
-
-
 def _can_save(inputs):
-    if not _is_candidate_valid(inputs):
+    if not _is_candidate_valid(inputs, emit_status=False):
         return False
-    if _copy_mode or _selected_item_id is None:
+    if _read_bool(inputs, _INPUT_COPY, False) or _selected_item_id is None:
         return True
     if _baseline_snapshot is None:
         return True
     return _form_snapshot(inputs) != _baseline_snapshot
 
 
-def _is_candidate_valid(inputs):
+def _is_candidate_valid(inputs, emit_status):
     type_id = _read_type_from_dropdown(inputs)
     if not type_id:
-        _set_status(inputs, _t("status_invalid_type"))
+        if emit_status:
+            _set_status(inputs, _t("status_invalid_type"))
         return False
     name = _read_string(inputs, _INPUT_NAME)
     if not name:
-        _set_status(inputs, _t("status_invalid_name"))
+        if emit_status:
+            _set_status(inputs, _t("status_invalid_name"))
         return False
     appearance = _read_dropdown(inputs, _INPUT_APPEARANCE)
     if not appearance or appearance == _t("appearance_none"):
-        _set_status(inputs, _t("status_invalid_appearance"))
+        if emit_status:
+            _set_status(inputs, _t("status_invalid_appearance"))
         return False
     return True
 
@@ -841,7 +821,7 @@ def _build_preview_html_url(image_path, title, tint_rgb=None, tint_alpha=None):
   <style>
     body {{ margin: 0; padding: 6px; background: #f3f3f3; font-family: Arial, sans-serif; }}
     .box {{
-      width: 96px; height: 96px; border: 1px solid #bbb; background: #ddd;
+      width: 72px; height: 72px; border: 1px solid #bbb; background: #ddd;
       display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
     }}
     img {{ width: 100%; height: 100%; object-fit: cover; }}
