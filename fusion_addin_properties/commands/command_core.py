@@ -1,6 +1,8 @@
 import adsk.core
 import adsk.fusion
 
+from shared.catalog import load_catalog
+
 WORKSPACE_ID = "FusionSolidEnvironment"
 PRIMARY_PANEL_ID = "SolidModifyPanel"
 PANEL_IDS = [
@@ -14,23 +16,36 @@ CUSTOM_PANEL_ID = "DIYGarageCut_DIYGarageCutPropertiesAddin_Panel"
 CUSTOM_PANEL_NAME = "DIY Garage Cut"
 COMMAND_ID = "DIYGarageCut_DIYGarageCutPropertiesAddin_PropertiesCommand"
 COMMAND_NAME = "DIYGC Eigenschaften"
-COMMAND_TOOLTIP = "Eigenschaften fuer einen Body anzeigen und aendern."
+COMMAND_TOOLTIP = "Material und Fräszulage fuer einen Body setzen."
 COMMAND_RESOURCES = "./Resources"
 
 ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
-ATTR_KEY_MASERUNG = "maserung"
-ATTR_KEY_NOTIZ = "notiz"
+ATTR_KEY_MATERIAL_ID = "material_id"
+ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
 
 _INPUT_BODY = "diygc_body_selection"
 _INPUT_SIZE = "diygc_size"
-_INPUT_MASERUNG = "diygc_maserung"
-_INPUT_NOTIZ = "diygc_notiz"
-_MASERUNG_OPTIONS = ["Längsrichtung", "Querrichtung", "keine"]
+_INPUT_MATERIAL = "diygc_material"
+_INPUT_TRIM_ALLOWANCE = "diygc_trim_allowance_mm"
+_MATERIAL_NONE_LABEL = "(Bitte waehlen)"
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
+_material_entries = []
+_material_by_id = {}
+_material_label_to_id = {}
+_material_id_to_label = {}
+
+
+class _MaterialEntry:
+    def __init__(self, item_id, item_type, name, appearance_name, default_trim_allowance_mm):
+        self.id = item_id
+        self.type = item_type
+        self.name = name
+        self.appearance_name = appearance_name
+        self.default_trim_allowance_mm = default_trim_allowance_mm
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -39,6 +54,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         cmd = event_args.command
         inputs = cmd.commandInputs
 
+        _load_material_entries()
+
         sel = inputs.addSelectionInput(_INPUT_BODY, "Koerper", "Einen Koerper auswaehlen")
         sel.addSelectionFilter("Bodies")
         sel.setSelectionLimits(1, 1)
@@ -46,16 +63,18 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         size_box = inputs.addTextBoxCommandInput(_INPUT_SIZE, "Bauteilgroesse (L x B x Dicke)", "-", 1, True)
         size_box.isFullWidth = False
 
-        maserung = inputs.addDropDownCommandInput(
-            _INPUT_MASERUNG,
-            "Maserung",
+        material_pick = inputs.addDropDownCommandInput(
+            _INPUT_MATERIAL,
+            "Material",
             adsk.core.DropDownStyles.TextListDropDownStyle
         )
-        for i, label in enumerate(_MASERUNG_OPTIONS):
-            maserung.listItems.add(label, i == 2)
+        material_pick.listItems.add(_MATERIAL_NONE_LABEL, True)
+        for entry in _material_entries:
+            label = _format_material_label(entry)
+            material_pick.listItems.add(label, False)
 
-        notiz = inputs.addTextBoxCommandInput(_INPUT_NOTIZ, "Notiz", "", 4, False)
-        notiz.isFullWidth = False
+        trim_input = inputs.addStringValueInput(_INPUT_TRIM_ALLOWANCE, "Fräszulage (mm)", "0.0")
+        trim_input.tooltip = "Numerischer Wert in mm (z. B. 0.5)."
 
         on_input_changed = _InputChangedHandler()
         cmd.inputChanged.add(on_input_changed)
@@ -71,20 +90,24 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
         try:
             event_args = adsk.core.InputChangedEventArgs.cast(args)
             changed = event_args.input
-            if not changed or changed.id != _INPUT_BODY:
+            if not changed:
                 return
             command = event_args.firingEvent.sender
             inputs = command.commandInputs if command else None
             if not inputs:
                 return
 
-            body = _read_selected_body(inputs)
-            if not body:
+            if changed.id == _INPUT_BODY:
+                _refresh_inputs_from_selected_body(inputs)
                 return
 
-            _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
-            _set_dropdown_value(inputs, _INPUT_MASERUNG, _get_attr(body, ATTR_KEY_MASERUNG, ""))
-            _set_input_value(inputs, _INPUT_NOTIZ, _get_attr(body, ATTR_KEY_NOTIZ, ""))
+            if changed.id == _INPUT_MATERIAL:
+                selected_id = _read_material_dropdown_value(inputs)
+                if not selected_id:
+                    _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
+                    return
+                default_trim = _material_default_trim_allowance(selected_id)
+                _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, _format_trim_allowance(default_trim))
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
 
@@ -109,25 +132,27 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
                 ui.messageBox("Bitte im Dialog einen Koerper auswaehlen.")
                 return
 
-            values = {
-                ATTR_KEY_MASERUNG: _read_dropdown_value(inputs, _INPUT_MASERUNG, ""),
-                ATTR_KEY_NOTIZ: _read_string_input(inputs, _INPUT_NOTIZ, ""),
-            }
+            material_id = _read_material_dropdown_value(inputs)
+            if not material_id:
+                ui.messageBox("Bitte ein Material auswaehlen.")
+                return
 
-            failures = []
-            for key, value in values.items():
-                ok, reason = _set_attr(body, key, value)
-                if not ok:
-                    failures.append(f"{key} ({reason})")
+            trim_input = _read_string_input(inputs, _INPUT_TRIM_ALLOWANCE, "")
+            trim_allowance_mm = _parse_trim_allowance(trim_input)
+            old_material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
 
-            if failures:
-                ro_hint = ""
-                if _is_body_likely_read_only(body):
-                    ro_hint = "\nHinweis: Ausgewaehlter Body wirkt schreibgeschuetzt (z. B. Referenz/Link)."
+            _write_body_attribute_or_raise(body, ATTR_KEY_MATERIAL_ID, material_id)
+            _write_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM, _format_trim_allowance(trim_allowance_mm))
+
+            if material_id != old_material_id:
+                _apply_material_appearance_or_raise(body, material_id)
+
+            if _is_body_likely_read_only(body):
                 diag = _diagnose_attribute_context(body)
                 ui.messageBox(
-                    "Eigenschaften teilweise gespeichert.\n"
-                    f"Fehlgeschlagene Felder: {', '.join(failures)}{ro_hint}\n\nDiagnose:\n{diag}"
+                    "Eigenschaften gespeichert, aber Body wirkt schreibgeschuetzt.\n"
+                    "Bitte Ergebnis pruefen.\n\nDiagnose:\n"
+                    f"{diag}"
                 )
                 return
 
@@ -147,6 +172,96 @@ def _resolve_attr_target(entity):
     except Exception:
         pass
     return entity
+
+
+def _load_material_entries():
+    global _material_entries, _material_by_id, _material_label_to_id, _material_id_to_label
+    catalog = load_catalog()
+    entries = []
+    for item in catalog.items:
+        if not item.id or not item.name:
+            raise RuntimeError("Catalog enthaelt ungueltiges Material ohne id/name.")
+        if not item.appearance:
+            raise RuntimeError(f"Catalog-Eintrag '{item.id}' hat keine Appearance.")
+        default_trim = _extract_default_trim_allowance(item)
+        entry = _MaterialEntry(
+            item_id=item.id,
+            item_type=item.type,
+            name=item.name,
+            appearance_name=item.appearance,
+            default_trim_allowance_mm=default_trim,
+        )
+        entries.append(entry)
+
+    if not entries:
+        raise RuntimeError("Catalog enthaelt keine Eintraege.")
+
+    entries.sort(key=lambda entry: (entry.type, entry.name, entry.id))
+    _material_entries = entries
+    _material_by_id = {entry.id: entry for entry in entries}
+    _material_label_to_id = {}
+    _material_id_to_label = {}
+    for entry in entries:
+        label = _format_material_label(entry)
+        _material_label_to_id[label] = entry.id
+        _material_id_to_label[entry.id] = label
+
+
+def _extract_default_trim_allowance(item):
+    raw = (item.properties or {}).get("sheet_default_trim_allowance")
+    if raw in (None, ""):
+        return 0.0
+    try:
+        numeric = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"Catalog-Eintrag '{item.id}' hat ungueltige sheet_default_trim_allowance: {raw}"
+        ) from exc
+    if numeric < 0:
+        raise RuntimeError(
+            f"Catalog-Eintrag '{item.id}' hat negative sheet_default_trim_allowance: {raw}"
+        )
+    return numeric
+
+
+def _format_material_label(entry):
+    return f"{entry.name} [{entry.id}]"
+
+
+def _refresh_inputs_from_selected_body(inputs):
+    body = _read_selected_body(inputs)
+    if not body:
+        _set_input_value(inputs, _INPUT_SIZE, "-")
+        _set_dropdown_value(inputs, _INPUT_MATERIAL, "")
+        _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
+        return
+
+    _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
+    material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
+    trim_allowance = str(_get_attr(body, ATTR_KEY_TRIM_ALLOWANCE_MM, "") or "").strip()
+
+    _set_dropdown_value(inputs, _INPUT_MATERIAL, material_id)
+    if trim_allowance:
+        _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, trim_allowance)
+        return
+    if material_id:
+        _set_input_value(
+            inputs,
+            _INPUT_TRIM_ALLOWANCE,
+            _format_trim_allowance(_material_default_trim_allowance(material_id)),
+        )
+        return
+    _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
+
+
+def _write_body_attribute_or_raise(body, key, value):
+    ok, reason = _set_attr(body, key, value)
+    if ok:
+        return
+    hint = ""
+    if _is_body_likely_read_only(body):
+        hint = " Body wirkt schreibgeschuetzt."
+    raise RuntimeError(f"Attribut '{key}' konnte nicht gespeichert werden ({reason}).{hint}")
 
 
 def _set_attr(entity, key, value):
@@ -215,6 +330,99 @@ def _get_attr(entity, key, default=None):
         if token:
             return _get_design_level_attr(token, key, default)
         return default
+
+
+def _read_material_dropdown_value(inputs):
+    label = _read_dropdown_value(inputs, _INPUT_MATERIAL, "")
+    if not label or label == _MATERIAL_NONE_LABEL:
+        return ""
+    material_id = _material_label_to_id.get(label, "")
+    if not material_id:
+        raise RuntimeError(f"Unbekannter Material-Dropdown-Wert: '{label}'")
+    return material_id
+
+
+def _material_default_trim_allowance(material_id):
+    entry = _material_by_id.get(material_id)
+    if not entry:
+        raise RuntimeError(f"Material '{material_id}' ist nicht im Catalog vorhanden.")
+    return float(entry.default_trim_allowance_mm)
+
+
+def _parse_trim_allowance(raw_value):
+    text = str(raw_value or "").strip().replace(",", ".")
+    if not text:
+        raise RuntimeError("Fräszulage fehlt.")
+    try:
+        numeric = float(text)
+    except ValueError as exc:
+        raise RuntimeError(f"Fräszulage ist keine Zahl: '{raw_value}'") from exc
+    if numeric < 0:
+        raise RuntimeError("Fräszulage muss >= 0 sein.")
+    return numeric
+
+
+def _format_trim_allowance(value):
+    numeric = float(value)
+    if abs(numeric - round(numeric)) < 1e-9:
+        return str(int(round(numeric)))
+    text = f"{numeric:.3f}".rstrip("0").rstrip(".")
+    return text
+
+
+def _find_appearance_by_name(name):
+    app = adsk.core.Application.get()
+    if not app:
+        raise RuntimeError("Fusion Application nicht verfuegbar.")
+
+    wanted = str(name or "").strip().lower()
+    if not wanted:
+        return None
+
+    def _scan(appearances):
+        if not appearances:
+            return None
+        for idx in range(appearances.count):
+            candidate = appearances.item(idx)
+            candidate_name = str(getattr(candidate, "name", "") or "").strip().lower()
+            if candidate_name == wanted:
+                return candidate
+        return None
+
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+    found = _scan(getattr(design, "appearances", None) if design else None)
+    if found:
+        return found
+
+    libraries = getattr(app, "materialLibraries", None)
+    if not libraries:
+        return None
+    for li in range(libraries.count):
+        library = libraries.item(li)
+        found = _scan(getattr(library, "appearances", None))
+        if found:
+            return found
+    return None
+
+
+def _apply_material_appearance_or_raise(body, material_id):
+    entry = _material_by_id.get(material_id)
+    if not entry:
+        raise RuntimeError(f"Material '{material_id}' ist nicht im Catalog vorhanden.")
+
+    appearance = _find_appearance_by_name(entry.appearance_name)
+    if not appearance:
+        raise RuntimeError(
+            f"Appearance '{entry.appearance_name}' aus Material '{material_id}' wurde in Fusion nicht gefunden."
+        )
+
+    target = _resolve_attr_target(body)
+    if not target:
+        raise RuntimeError("Body fuer Appearance-Zuweisung nicht verfuegbar.")
+    try:
+        target.appearance = appearance
+    except Exception as exc:
+        raise RuntimeError(f"Appearance konnte nicht gesetzt werden: {exc}") from exc
 
 
 def _read_selected_body(inputs):
@@ -385,25 +593,20 @@ def _set_dropdown_value(inputs, input_id, value):
         dd = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
         if not dd:
             return
-        wanted = (value or "").strip().lower()
-        fallback_idx = 0
-        for i in range(dd.listItems.count):
-            item = dd.listItems.item(i)
-            if (item.name or "").strip().lower() == "keine":
-                fallback_idx = i
-                break
+        fallback_label = _MATERIAL_NONE_LABEL
+        wanted_label = ""
+        value_text = str(value or "").strip()
+        if value_text:
+            wanted_label = _material_id_to_label.get(value_text, "")
 
-        if not wanted:
-            if dd.listItems.count > 0:
-                dd.listItems.item(fallback_idx).isSelected = True
-            return
+        chosen_label = wanted_label if wanted_label else fallback_label
         for i in range(dd.listItems.count):
             item = dd.listItems.item(i)
-            if (item.name or "").strip().lower() == wanted:
+            if (item.name or "").strip() == chosen_label:
                 item.isSelected = True
                 return
         if dd.listItems.count > 0:
-            dd.listItems.item(fallback_idx).isSelected = True
+            dd.listItems.item(0).isSelected = True
     except Exception as exc:
         print(f"Properties: Dropdown '{input_id}' konnte nicht gesetzt werden: {exc}")
 
