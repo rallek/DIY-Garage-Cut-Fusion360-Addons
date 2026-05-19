@@ -171,7 +171,7 @@ def _body_to_csv_row(body, catalog):
     material_type = _type_label(catalog_item.type)
     trim_allowance_mm = _resolve_trim_allowance_for_export(body, catalog_item.type)
     grain_direction = _resolve_grain_direction_for_export(body, catalog_item)
-    material_name = _safe_name(getattr(body, "appearance", None))
+    material_name = str(catalog_item.name or "").strip() or "-"
     return [name, length, width, thickness, material_type, trim_allowance_mm, grain_direction, material_name]
 
 
