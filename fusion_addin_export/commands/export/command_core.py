@@ -365,6 +365,9 @@ def _material_type_supports_trim_allowance(material_type):
 def _resolve_grain_direction_for_export(body, catalog_item):
     if not _material_type_supports_grain(catalog_item.type):
         return "none"
+    has_grain = str((catalog_item.properties or {}).get(_TYPE_FIELD_HAS_GRAIN, "none") or "none").strip().lower()
+    if has_grain != "yes":
+        return "none"
     attrs = _collect_body_attributes(body)
     for group, key, value in attrs:
         if group != _ATTRIBUTE_GROUP:

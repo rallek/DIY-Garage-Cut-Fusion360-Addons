@@ -198,7 +198,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 entry = _material_by_id.get(selected_id)
                 if entry and entry.supports_trim_allowance:
                     _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, _format_trim_allowance(entry.default_trim_allowance_mm))
-                if entry and entry.supports_grain:
+                if _material_requires_grain_direction(entry):
                     _set_grain_direction_dropdown(inputs, entry.default_grain_direction)
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
@@ -242,7 +242,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             else:
                 _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
 
-            if entry.supports_grain:
+            if _material_requires_grain_direction(entry):
                 grain_direction = _read_grain_direction_dropdown(inputs)
                 _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
             else:
@@ -391,7 +391,7 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
 
     grain_direction = str(_get_attr(body, ATTR_KEY_GRAIN_DIRECTION, "") or "").strip().lower()
-    if entry and entry.supports_grain:
+    if _material_requires_grain_direction(entry):
         if grain_direction not in ("none", "length", "width"):
             grain_direction = entry.default_grain_direction
         _set_grain_direction_dropdown(inputs, grain_direction)
@@ -488,7 +488,15 @@ def _update_grain_direction_visibility(inputs, material_id):
     if not dropdown:
         return
     entry = _material_by_id.get(material_id or "")
-    dropdown.isVisible = bool(entry and entry.supports_grain)
+    dropdown.isVisible = _material_requires_grain_direction(entry)
+
+
+def _material_requires_grain_direction(entry):
+    if not entry:
+        return False
+    if not entry.supports_grain:
+        return False
+    return str(entry.sheet_has_grain or "").strip().lower() == "yes"
 
 
 def _write_body_attribute_or_raise(body, key, value):
