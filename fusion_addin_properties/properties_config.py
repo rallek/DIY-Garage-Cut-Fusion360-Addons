@@ -14,7 +14,7 @@ CUSTOM_PANEL_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_Panel"
 CUSTOM_PANEL_NAME = "DIY Garage Cut"
 COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_PropertiesCommand"
 COMMAND_NAME = "DIYGC Eigenschaften"
-COMMAND_TOOLTIP = "Material und Fräszulage fuer einen Body setzen."
+COMMAND_TOOLTIP = "Material und Fräszulage für einen Body setzen."
 COMMAND_RESOURCES = "./Resources"
 
 ATTRIBUTE_GROUP = f"{COMPANY_NAME}.part_metadata"

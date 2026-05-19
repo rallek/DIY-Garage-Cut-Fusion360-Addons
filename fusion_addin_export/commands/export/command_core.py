@@ -111,6 +111,8 @@ def _append_component_bodies(component, rows, seen_tokens, catalog):
         for body in component.bRepBodies:
             _append_body_row_if_visible(body, rows, seen_tokens, catalog)
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
         raise RuntimeError(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
@@ -124,8 +126,12 @@ def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog)
                     _append_body_row_if_visible(body, rows, seen_tokens, catalog)
                 _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens, catalog)
             except Exception as exc:
+                if isinstance(exc, RuntimeError):
+                    raise
                 raise RuntimeError(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}") from exc
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
         raise RuntimeError(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}") from exc
 
 
@@ -141,6 +147,10 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
         seen_tokens.add(token)
         rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
+        if isinstance(exc, ValueError):
+            raise RuntimeError(str(exc)) from exc
         body_name = _safe_body_name(body)
         raise RuntimeError(f"CSV-Export: Body '{body_name}' konnte nicht exportiert werden: {exc}") from exc
 
