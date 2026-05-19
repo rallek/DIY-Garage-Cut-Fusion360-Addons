@@ -9,6 +9,9 @@ from shared.catalog import get_type_fields, get_type_label, load_catalog
 
 _ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
 _ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
+_ATTR_KEY_GRAIN_DIRECTION = "grain_direction"
+_TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
+_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 
 _handlers = []
 _active_panel_id = None
@@ -163,12 +166,13 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
 
 def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
-    width, height, depth = _get_dimensions_from_bounding_box(body)
     catalog_item = _resolve_catalog_material_ref(body, catalog)
+    length, width, thickness = _get_dimensions_for_export(body, catalog_item.type)
     material_type = _type_label(catalog_item.type)
     trim_allowance_mm = _resolve_trim_allowance_for_export(body, catalog_item.type)
+    grain_direction = _resolve_grain_direction_for_export(body, catalog_item)
     material_name = _safe_name(getattr(body, "appearance", None))
-    return [name, width, height, depth, material_type, trim_allowance_mm, material_name]
+    return [name, length, width, thickness, material_type, trim_allowance_mm, grain_direction, material_name]
 
 
 def _safe_body_name(body):
@@ -180,16 +184,25 @@ def _safe_body_name(body):
     return "-"
 
 
-def _get_dimensions_from_bounding_box(body):
+def _get_dimensions_for_export(body, material_type):
     try:
         bbox = body.boundingBox
         min_p = bbox.minPoint
         max_p = bbox.maxPoint
-        # Fusion-BoundingBox ist typischerweise in cm, Export soll in mm sein.
-        width = abs(max_p.x - min_p.x) * 10.0
-        height = abs(max_p.y - min_p.y) * 10.0
-        depth = abs(max_p.z - min_p.z) * 10.0
-        return _fmt_mm(width), _fmt_mm(height), _fmt_mm(depth)
+        dims_mm = sorted(
+            [
+                abs(max_p.x - min_p.x) * 10.0,
+                abs(max_p.y - min_p.y) * 10.0,
+                abs(max_p.z - min_p.z) * 10.0,
+            ]
+        )
+        # Index 0 = thickness (smallest), 1 = width (middle), 2 = length (largest)
+        thickness = dims_mm[0]
+        width = dims_mm[1]
+        length = dims_mm[2]
+        if str(material_type or "").strip() == "bar":
+            return _fmt_mm(length), _fmt_mm(width), _fmt_mm(thickness)
+        return _fmt_mm(length), _fmt_mm(width), _fmt_mm(thickness)
     except Exception as exc:
         print(f"CSV-Export: BoundingBox-Fehler bei Body: {exc}")
         return "-", "-", "-"
@@ -349,14 +362,43 @@ def _material_type_supports_trim_allowance(material_type):
     return False
 
 
+def _resolve_grain_direction_for_export(body, catalog_item):
+    if not _material_type_supports_grain(catalog_item.type):
+        return "none"
+    attrs = _collect_body_attributes(body)
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != _ATTR_KEY_GRAIN_DIRECTION:
+            continue
+        value_text = str(value).strip().lower() if value is not None else ""
+        if value_text in ("none", "length", "width"):
+            return value_text
+        return "none"
+
+    default_direction = str((catalog_item.properties or {}).get(_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION, "none") or "none").strip().lower()
+    if default_direction in ("none", "length", "width"):
+        return default_direction
+    return "none"
+
+
+def _material_type_supports_grain(material_type):
+    type_name = str(material_type or "").strip()
+    if not type_name:
+        return False
+    keys = {str(field.get("key", "")).strip() for field in get_type_fields(type_name)}
+    return _TYPE_FIELD_HAS_GRAIN in keys and _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION in keys
+
+
 def _write_csv(path, rows):
     header = [
         "body_name",
+        "length_mm",
         "width_mm",
-        "height_mm",
-        "depth_mm",
+        "thickness_mm",
         "material_type",
         "trim_allowance_mm",
+        "grain_direction",
         "material",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:

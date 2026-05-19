@@ -25,13 +25,17 @@ COMMAND_RESOURCES = "./Resources"
 ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
 ATTR_KEY_MATERIAL_ID = "material_id"
 ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
+ATTR_KEY_GRAIN_DIRECTION = "grain_direction"
 _TYPE_FIELD_TRIM_ALLOWANCE = "sheet_default_trim_allowance"
+_TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
+_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 
 _INPUT_BODY = "diygc_body_selection"
 _INPUT_SIZE = "diygc_size"
 _INPUT_FILTER_TYPE = "diygc_filter_type"
 _INPUT_MATERIAL = "diygc_material"
 _INPUT_TRIM_ALLOWANCE = "diygc_trim_allowance_mm"
+_INPUT_GRAIN_DIRECTION = "diygc_grain_direction"
 
 _handlers = []
 _active_panel_id = None
@@ -54,6 +58,10 @@ _STRINGS = {
         "material_none": "(Bitte wählen)",
         "trim_allowance": "Fräszulage (mm)",
         "trim_allowance_tooltip": "Numerischer Wert in mm (z. B. 0,5).",
+        "grain_direction": "Maserungsrichtung",
+        "grain_none": "Keine",
+        "grain_length": "Längs",
+        "grain_width": "Quer",
     },
     "en": {
         "body": "Body",
@@ -65,18 +73,36 @@ _STRINGS = {
         "material_none": "(Please select)",
         "trim_allowance": "Trim allowance (mm)",
         "trim_allowance_tooltip": "Numeric value in mm (e.g. 0.5).",
+        "grain_direction": "Grain direction",
+        "grain_none": "None",
+        "grain_length": "Length",
+        "grain_width": "Width",
     },
 }
 
 
 class _MaterialEntry:
-    def __init__(self, item_id, item_type, name, appearance_name, supports_trim_allowance, default_trim_allowance_mm):
+    def __init__(
+        self,
+        item_id,
+        item_type,
+        name,
+        appearance_name,
+        supports_trim_allowance,
+        default_trim_allowance_mm,
+        supports_grain,
+        sheet_has_grain,
+        default_grain_direction,
+    ):
         self.id = item_id
         self.type = item_type
         self.name = name
         self.appearance_name = appearance_name
         self.supports_trim_allowance = supports_trim_allowance
         self.default_trim_allowance_mm = default_trim_allowance_mm
+        self.supports_grain = supports_grain
+        self.sheet_has_grain = sheet_has_grain
+        self.default_grain_direction = default_grain_direction
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -117,6 +143,14 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         trim_input.tooltip = _t("trim_allowance_tooltip")
         trim_input.isVisible = False
 
+        grain_pick = inputs.addDropDownCommandInput(
+            _INPUT_GRAIN_DIRECTION,
+            _t("grain_direction"),
+            adsk.core.DropDownStyles.TextListDropDownStyle,
+        )
+        _populate_grain_direction_dropdown(grain_pick, "none")
+        grain_pick.isVisible = False
+
         on_input_changed = _InputChangedHandler()
         cmd.inputChanged.add(on_input_changed)
         _handlers.append(on_input_changed)
@@ -148,6 +182,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 material_pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_MATERIAL))
                 _populate_material_dropdown(material_pick, selected_material_id=selected_material_id, filter_type=filter_type)
                 _update_trim_allowance_visibility(inputs, selected_material_id)
+                _update_grain_direction_visibility(inputs, selected_material_id)
                 return
 
             if changed.id == _INPUT_MATERIAL:
@@ -155,11 +190,16 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 if not selected_id:
                     _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
                     _update_trim_allowance_visibility(inputs, None)
+                    _set_grain_direction_dropdown(inputs, "none")
+                    _update_grain_direction_visibility(inputs, None)
                     return
                 _update_trim_allowance_visibility(inputs, selected_id)
+                _update_grain_direction_visibility(inputs, selected_id)
                 entry = _material_by_id.get(selected_id)
                 if entry and entry.supports_trim_allowance:
                     _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, _format_trim_allowance(entry.default_trim_allowance_mm))
+                if entry and entry.supports_grain:
+                    _set_grain_direction_dropdown(inputs, entry.default_grain_direction)
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
 
@@ -202,6 +242,12 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             else:
                 _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
 
+            if entry.supports_grain:
+                grain_direction = _read_grain_direction_dropdown(inputs)
+                _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
+            else:
+                _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
+
             if material_id != old_material_id:
                 _apply_material_appearance_or_raise(body, material_id)
 
@@ -231,6 +277,9 @@ def _load_material_entries():
             raise RuntimeError(f"Katalog-Eintrag '{item.id}' hat keine Appearance.")
         supports_trim = _type_supports_trim_allowance(item.type)
         default_trim = _extract_default_trim_allowance(item, supports_trim)
+        supports_grain = _type_supports_grain(item.type)
+        sheet_has_grain = _extract_sheet_has_grain(item, supports_grain)
+        default_grain_direction = _extract_default_grain_direction(item, supports_grain)
         entries.append(
             _MaterialEntry(
                 item_id=item.id,
@@ -239,6 +288,9 @@ def _load_material_entries():
                 appearance_name=item.appearance,
                 supports_trim_allowance=supports_trim,
                 default_trim_allowance_mm=default_trim,
+                supports_grain=supports_grain,
+                sheet_has_grain=sheet_has_grain,
+                default_grain_direction=default_grain_direction,
             )
         )
 
@@ -255,6 +307,11 @@ def _type_supports_trim_allowance(type_id):
         if str(field.get("key", "")).strip() == _TYPE_FIELD_TRIM_ALLOWANCE:
             return True
     return False
+
+
+def _type_supports_grain(type_id):
+    keys = {str(field.get("key", "")).strip() for field in get_type_fields(type_id)}
+    return _TYPE_FIELD_HAS_GRAIN in keys and _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION in keys
 
 
 def _extract_default_trim_allowance(item, supports_trim):
@@ -276,6 +333,26 @@ def _extract_default_trim_allowance(item, supports_trim):
     return numeric
 
 
+def _extract_sheet_has_grain(item, supports_grain):
+    if not supports_grain:
+        return "none"
+    raw = str((item.properties or {}).get(_TYPE_FIELD_HAS_GRAIN, "none") or "none").strip().lower()
+    if raw not in ("none", "yes", "no"):
+        raise RuntimeError(f"Katalog-Eintrag '{item.id}' hat ungültige {_TYPE_FIELD_HAS_GRAIN}: {raw}")
+    return raw
+
+
+def _extract_default_grain_direction(item, supports_grain):
+    if not supports_grain:
+        return "none"
+    raw = str((item.properties or {}).get(_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION, "none") or "none").strip().lower()
+    if raw not in ("none", "length", "width"):
+        raise RuntimeError(
+            f"Katalog-Eintrag '{item.id}' hat ungültige {_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION}: {raw}"
+        )
+    return raw
+
+
 def _format_material_label(entry):
     return f"{entry.name} [{_type_label(entry.type)}]"
 
@@ -289,6 +366,8 @@ def _refresh_inputs_from_selected_body(inputs):
         _populate_material_dropdown(material_pick, selected_material_id=None, filter_type=None)
         _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
         _update_trim_allowance_visibility(inputs, None)
+        _set_grain_direction_dropdown(inputs, "none")
+        _update_grain_direction_visibility(inputs, None)
         return
 
     _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
@@ -301,14 +380,23 @@ def _refresh_inputs_from_selected_body(inputs):
     material_pick = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_MATERIAL))
     _populate_material_dropdown(material_pick, selected_material_id=material_id or None, filter_type=filter_type)
     _update_trim_allowance_visibility(inputs, material_id or None)
+    _update_grain_direction_visibility(inputs, material_id or None)
 
     if entry and entry.supports_trim_allowance:
         if trim_allowance:
             _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, trim_allowance)
         else:
             _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, _format_trim_allowance(entry.default_trim_allowance_mm))
-        return
-    _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
+    else:
+        _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, "")
+
+    grain_direction = str(_get_attr(body, ATTR_KEY_GRAIN_DIRECTION, "") or "").strip().lower()
+    if entry and entry.supports_grain:
+        if grain_direction not in ("none", "length", "width"):
+            grain_direction = entry.default_grain_direction
+        _set_grain_direction_dropdown(inputs, grain_direction)
+    else:
+        _set_grain_direction_dropdown(inputs, "none")
 
 
 def _populate_material_dropdown(dropdown, selected_material_id=None, filter_type=None):
@@ -359,6 +447,48 @@ def _update_trim_allowance_visibility(inputs, material_id):
         return
     entry = _material_by_id.get(material_id or "")
     trim_input.isVisible = bool(entry and entry.supports_trim_allowance)
+
+
+def _populate_grain_direction_dropdown(dropdown, selected_value):
+    if not dropdown:
+        return
+    dropdown.listItems.clear()
+    options = [
+        ("none", _t("grain_none")),
+        ("length", _t("grain_length")),
+        ("width", _t("grain_width")),
+    ]
+    wanted = str(selected_value or "none").strip().lower()
+    if wanted not in ("none", "length", "width"):
+        wanted = "none"
+    for value, label in options:
+        dropdown.listItems.add(label, value == wanted)
+
+
+def _set_grain_direction_dropdown(inputs, value):
+    dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_GRAIN_DIRECTION))
+    _populate_grain_direction_dropdown(dropdown, value)
+
+
+def _read_grain_direction_dropdown(inputs):
+    label = _read_dropdown_value(inputs, _INPUT_GRAIN_DIRECTION, "")
+    mapping = {
+        _t("grain_none").lower(): "none",
+        _t("grain_length").lower(): "length",
+        _t("grain_width").lower(): "width",
+    }
+    value = mapping.get(label.lower(), "none")
+    if value not in ("none", "length", "width"):
+        return "none"
+    return value
+
+
+def _update_grain_direction_visibility(inputs, material_id):
+    dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_GRAIN_DIRECTION))
+    if not dropdown:
+        return
+    entry = _material_by_id.get(material_id or "")
+    dropdown.isVisible = bool(entry and entry.supports_grain)
 
 
 def _write_body_attribute_or_raise(body, key, value):

@@ -24,7 +24,23 @@ _DEFAULT_TYPE_CONFIG = {
                     "quantity": "length",
                     "storage_unit": "mm",
                     "legacy_keys": ["default_trim_allowance_mm"],
-                }
+                },
+                {
+                    "key": "sheet_has_grain",
+                    "kind": "enum",
+                    "labels": {"de": "Maserung vorhanden", "en": "Has grain"},
+                    "options": ["none", "yes", "no"],
+                    "default": "none",
+                    "csv": False,
+                },
+                {
+                    "key": "sheet_default_grain_direction",
+                    "kind": "enum",
+                    "labels": {"de": "Standard-Maserungsrichtung", "en": "Default grain direction"},
+                    "options": ["none", "length", "width"],
+                    "default": "none",
+                    "csv": False,
+                },
             ],
         },
         {
