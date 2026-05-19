@@ -1,19 +1,20 @@
 import adsk.core
 import adsk.fusion
 import csv
+import locale
 import re
 
 import export_config as config
-from shared.catalog import get_type_fields, load_catalog
+from shared.catalog import get_type_fields, get_type_label, load_catalog
 
 _ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
-_ATTR_KEY_MATERIAL_ID = "material_id"
 _ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
+_ui_lang = "de"
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -41,6 +42,9 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
 
 
 def _run_export_mode(app, ui):
+    global _ui_lang
+    _ui_lang = _detect_ui_lang()
+
     export_path = _pick_export_path(app, ui)
     if not export_path:
         ui.messageBox("CSV-Export abgebrochen. Es wurde keine Datei geschrieben.")
@@ -160,12 +164,11 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
 def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
     width, height, depth = _get_dimensions_from_bounding_box(body)
-    material_id, material_type = _resolve_catalog_material_ref(body, catalog)
-    trim_allowance_mm = _resolve_trim_allowance_for_export(body, material_type)
-    material_name = _safe_name(getattr(body, "material", None))
-    appearance_name = _safe_name(getattr(body, "appearance", None))
-    attr_text = _collect_attributes_as_text(body)
-    return [name, width, height, depth, material_id, material_type, trim_allowance_mm, material_name, appearance_name, attr_text]
+    catalog_item = _resolve_catalog_material_ref(body, catalog)
+    material_type = _type_label(catalog_item.type)
+    trim_allowance_mm = _resolve_trim_allowance_for_export(body, catalog_item.type)
+    material_name = _safe_name(getattr(body, "appearance", None))
+    return [name, width, height, depth, material_type, trim_allowance_mm, material_name]
 
 
 def _safe_body_name(body):
@@ -209,19 +212,6 @@ def _safe_name(obj):
     except Exception:
         pass
     return "-"
-
-
-def _collect_attributes_as_text(body):
-    entries = []
-    try:
-        attrs = _collect_body_attributes(body)
-        for group, name, value in attrs:
-            if group == _ATTRIBUTE_GROUP and name in (_ATTR_KEY_MATERIAL_ID, _ATTR_KEY_TRIM_ALLOWANCE_MM):
-                continue
-            entries.append(f"{group}:{name}={value}")
-    except Exception as exc:
-        raise RuntimeError(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}") from exc
-    return ";".join(entries) if entries else "-"
 
 
 def _collect_body_attributes(body):
@@ -304,7 +294,7 @@ def _resolve_catalog_material_ref(body, catalog):
             f"Body '{body_name}' referenziert material_id '{material_id}', "
             "die nicht in catalog.json existiert."
         )
-    return item.id, item.type
+    return item
 
 
 def _resolve_catalog_material_id(attributes):
@@ -365,12 +355,9 @@ def _write_csv(path, rows):
         "width_mm",
         "height_mm",
         "depth_mm",
-        "material_id",
         "material_type",
         "trim_allowance_mm",
         "material",
-        "appearance",
-        "attributes",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
@@ -427,6 +414,39 @@ def _try_load_catalog():
         return load_catalog()
     except Exception as exc:
         raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
+
+
+def _detect_ui_lang():
+    app = adsk.core.Application.get()
+    candidates = []
+    try:
+        prefs = getattr(app, "preferences", None)
+        gp = getattr(prefs, "generalPreferences", None) if prefs else None
+        for attr in ("userLanguage", "language"):
+            val = getattr(gp, attr, None)
+            if val is not None:
+                candidates.append(str(val))
+    except Exception:
+        pass
+
+    try:
+        loc = locale.getdefaultlocale()
+        if loc and loc[0]:
+            candidates.append(loc[0])
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        cand = (candidate or "").lower()
+        if "de" in cand:
+            return "de"
+        if "en" in cand:
+            return "en"
+    return "de"
+
+
+def _type_label(type_id):
+    return get_type_label(type_id, _ui_lang)
 
 
 def _get_or_create_panel(workspace):
