@@ -4,9 +4,11 @@ import csv
 import re
 
 import export_config as config
-from shared.catalog import get_csv_fields, load_catalog
+from shared.catalog import get_type_fields, load_catalog
 
 _ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
+_ATTR_KEY_MATERIAL_ID = "material_id"
+_ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
 
 _handlers = []
 _active_panel_id = None
@@ -159,10 +161,11 @@ def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
     width, height, depth = _get_dimensions_from_bounding_box(body)
     material_id, material_type = _resolve_catalog_material_ref(body, catalog)
+    trim_allowance_mm = _resolve_trim_allowance_for_export(body, material_type)
     material_name = _safe_name(getattr(body, "material", None))
     appearance_name = _safe_name(getattr(body, "appearance", None))
-    attr_text = _collect_attributes_as_text(body, catalog)
-    return [name, width, height, depth, material_id, material_type, material_name, appearance_name, attr_text]
+    attr_text = _collect_attributes_as_text(body)
+    return [name, width, height, depth, material_id, material_type, trim_allowance_mm, material_name, appearance_name, attr_text]
 
 
 def _safe_body_name(body):
@@ -183,15 +186,18 @@ def _get_dimensions_from_bounding_box(body):
         width = abs(max_p.x - min_p.x) * 10.0
         height = abs(max_p.y - min_p.y) * 10.0
         depth = abs(max_p.z - min_p.z) * 10.0
-        return _fmt_num(width), _fmt_num(height), _fmt_num(depth)
+        return _fmt_mm(width), _fmt_mm(height), _fmt_mm(depth)
     except Exception as exc:
         print(f"CSV-Export: BoundingBox-Fehler bei Body: {exc}")
         return "-", "-", "-"
 
 
-def _fmt_num(value):
+def _fmt_mm(value):
     try:
-        return f"{float(value):.6f}"
+        numeric = float(value)
+        if abs(numeric - round(numeric)) < 1e-9:
+            return str(int(round(numeric)))
+        return f"{numeric:.3f}".rstrip("0").rstrip(".")
     except Exception:
         return "-"
 
@@ -205,13 +211,14 @@ def _safe_name(obj):
     return "-"
 
 
-def _collect_attributes_as_text(body, catalog):
+def _collect_attributes_as_text(body):
     entries = []
     try:
         attrs = _collect_body_attributes(body)
         for group, name, value in attrs:
+            if group == _ATTRIBUTE_GROUP and name in (_ATTR_KEY_MATERIAL_ID, _ATTR_KEY_TRIM_ALLOWANCE_MM):
+                continue
             entries.append(f"{group}:{name}={value}")
-        entries.extend(_collect_catalog_csv_entries(attrs, catalog))
     except Exception as exc:
         raise RuntimeError(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}") from exc
     return ";".join(entries) if entries else "-"
@@ -275,37 +282,6 @@ def _try_get_native_object(entity):
         return None
 
 
-def _collect_catalog_csv_entries(attributes, catalog):
-    if not catalog:
-        return []
-    material_id, source = _resolve_catalog_material_id(attributes)
-    if not material_id:
-        return []
-    if source == "material_typ":
-        return []
-    item = catalog.get(material_id)
-    if not item:
-        return []
-    entries = [
-        f"DIYGarageCut.catalog:item_id={item.id}",
-        f"DIYGarageCut.catalog:item_type={item.type}",
-        f"DIYGarageCut.catalog:item_name={item.name}",
-    ]
-    for field in get_csv_fields(item.type):
-        key = field.get("key")
-        if not key:
-            continue
-        if key in (item.properties or {}):
-            entries.append(f"DIYGarageCut.catalog:{key}={item.properties.get(key)}")
-            unit = (field.get("storage_unit") or "").strip()
-            if unit:
-                entries.append(f"DIYGarageCut.catalog:{key}_unit={unit}")
-    doc_unit = _get_document_length_unit()
-    if doc_unit:
-        entries.append(f"DIYGarageCut.context:document_length_unit={doc_unit}")
-    return entries
-
-
 def _resolve_catalog_material_ref(body, catalog):
     if not catalog:
         raise ValueError("Catalog nicht geladen.")
@@ -354,6 +330,35 @@ def _resolve_catalog_material_id(attributes):
     return None, None
 
 
+def _resolve_trim_allowance_for_export(body, material_type):
+    if not _material_type_supports_trim_allowance(material_type):
+        return ""
+    attrs = _collect_body_attributes(body)
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != _ATTR_KEY_TRIM_ALLOWANCE_MM:
+            continue
+        value_text = str(value).strip() if value is not None else ""
+        if value_text in ("", "-"):
+            return ""
+        try:
+            return _fmt_mm(float(value_text.replace(",", ".")))
+        except Exception:
+            return value_text
+    return ""
+
+
+def _material_type_supports_trim_allowance(material_type):
+    type_name = str(material_type or "").strip()
+    if not type_name:
+        return False
+    for field in get_type_fields(type_name):
+        if str(field.get("key", "")).strip() == "sheet_default_trim_allowance":
+            return True
+    return False
+
+
 def _write_csv(path, rows):
     header = [
         "body_name",
@@ -362,6 +367,7 @@ def _write_csv(path, rows):
         "depth_mm",
         "material_id",
         "material_type",
+        "trim_allowance_mm",
         "material",
         "appearance",
         "attributes",
@@ -421,19 +427,6 @@ def _try_load_catalog():
         return load_catalog()
     except Exception as exc:
         raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
-
-
-def _get_document_length_unit():
-    try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if not units:
-            return ""
-        default_units = getattr(units, "defaultLengthUnits", None)
-        return str(default_units or "").strip()
-    except Exception:
-        return ""
 
 
 def _get_or_create_panel(workspace):
