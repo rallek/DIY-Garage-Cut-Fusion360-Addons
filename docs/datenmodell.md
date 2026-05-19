@@ -123,12 +123,11 @@ Nie führende Datenquelle.
 
 # CSV-Bezug
 
-CSV-Header bleibt unverändert.
+Entscheidung (2026-05-19):
+- Keine Sammelspalte `attributes` im Zielvertrag.
+- Relevante Felder werden als eigene CSV-Spalten geführt.
+- `attributes` war nur Übergang/Debug und ist nicht Teil des stabilen Datenvertrags.
 
-Typspezifische Felder aus dem Katalog werden in der Spalte `attributes` ergänzt, z. B.:
+CSV-Header ist damit explizit fachlich aufgebaut (z. B. Maße, Material, Fräszulage, Kanten, Hinweise), statt Key/Value-Textsammlung.
 
-```text
-DIYGarageCut.catalog:item_id=sheet.mdf
-DIYGarageCut.catalog:sheet_default_trim_allowance=0.5
-DIYGarageCut.catalog:sheet_default_trim_allowance_unit=mm
-```
+Katalog-/Typ-Informationen bleiben intern strukturierte Quelle (`catalog.json` + `catalog_type_config.json`) und werden bei Bedarf gezielt in eigene Spalten projiziert.
