@@ -219,23 +219,60 @@ def _collect_attributes_as_text(body, catalog):
 
 def _collect_body_attributes(body):
     out = []
-    attributes = getattr(body, "attributes", None)
-    if attributes is not None and attributes.count > 0:
-        for i in range(attributes.count):
-            attr = attributes.item(i)
-            if not attr:
+    seen = set()
+
+    targets = [body]
+    native = _try_get_native_object(body)
+    if native is not None and native is not body:
+        targets.append(native)
+
+    for target in targets:
+        _append_attribute_rows(target, out, seen)
+
+    tokens = []
+    body_token = _get_entity_token(body)
+    if body_token:
+        tokens.append(body_token)
+    native_token = _get_entity_token(native) if native is not None else None
+    if native_token and native_token not in tokens:
+        tokens.append(native_token)
+    for token in tokens:
+        for row in _collect_design_fallback_attributes(token):
+            marker = (row[0], row[1], row[2])
+            if marker in seen:
                 continue
-            out.append(
-                (
-                    attr.groupName if attr.groupName else "-",
-                    attr.name if attr.name else "-",
-                    attr.value if attr.value is not None else "-",
-                )
-            )
-    token = _get_entity_token(body)
-    if token:
-        out.extend(_collect_design_fallback_attributes(token))
+            seen.add(marker)
+            out.append(row)
     return out
+
+
+def _append_attribute_rows(entity, out, seen):
+    if entity is None:
+        return
+    attributes = getattr(entity, "attributes", None)
+    if attributes is None or attributes.count < 1:
+        return
+    for i in range(attributes.count):
+        attr = attributes.item(i)
+        if not attr:
+            continue
+        group = attr.groupName if attr.groupName else "-"
+        name = attr.name if attr.name else "-"
+        value = attr.value if attr.value is not None else "-"
+        marker = (group, name, value)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(marker)
+
+
+def _try_get_native_object(entity):
+    if entity is None:
+        return None
+    try:
+        return getattr(entity, "nativeObject", None)
+    except Exception:
+        return None
 
 
 def _collect_catalog_csv_entries(attributes, catalog):
