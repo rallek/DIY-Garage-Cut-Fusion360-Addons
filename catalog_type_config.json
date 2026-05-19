@@ -32,6 +32,11 @@
             "en": "Has grain"
           },
           "options": ["none", "yes", "no"],
+          "option_labels": {
+            "none": { "de": "Keine", "en": "None" },
+            "yes": { "de": "Ja", "en": "Yes" },
+            "no": { "de": "Nein", "en": "No" }
+          },
           "default": "none",
           "csv": false
         },
@@ -43,6 +48,11 @@
             "en": "Default grain direction"
           },
           "options": ["none", "length", "width"],
+          "option_labels": {
+            "none": { "de": "Keine", "en": "None" },
+            "length": { "de": "Längs", "en": "Length" },
+            "width": { "de": "Quer", "en": "Width" }
+          },
           "default": "none",
           "csv": false
         }

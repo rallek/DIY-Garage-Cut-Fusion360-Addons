@@ -1009,10 +1009,11 @@ def _add_type_specific_field_inputs(inputs):
                     "",
                     adsk.core.DropDownStyles.TextListDropDownStyle,
                 )
-                options = list(field.get("options", []))
+                options = _enum_options(field)
                 default_value = str(field.get("default", options[0] if options else ""))
+                labels = _enum_labels_for_field(field)
                 for option in options:
-                    dd.listItems.add(str(option), str(option) == default_value)
+                    dd.listItems.add(labels.get(option, option), str(option) == default_value)
                 ctrl = dd
             if ctrl:
                 _try_set_full_width(ctrl)
@@ -1032,6 +1033,42 @@ def _field_label(field):
         if unit:
             return f"{base} ({unit})"
     return base
+
+
+def _enum_options(field):
+    options = field.get("options", [])
+    if not isinstance(options, list):
+        return []
+    return [str(option) for option in options]
+
+
+def _enum_labels_for_field(field):
+    options = _enum_options(field)
+    label_map = field.get("option_labels", {})
+    out = {}
+    for option in options:
+        if isinstance(label_map, dict):
+            entry = label_map.get(option)
+        else:
+            entry = None
+        if isinstance(entry, dict):
+            if _ui_lang == "en":
+                out[option] = str(entry.get("en", option))
+            else:
+                out[option] = str(entry.get("de", option))
+        else:
+            out[option] = option
+    return out
+
+
+def _enum_value_from_label(field, selected_label):
+    label = str(selected_label or "").strip().lower()
+    labels = _enum_labels_for_field(field)
+    for option, localized in labels.items():
+        if str(localized).strip().lower() == label:
+            return option
+    fallback = str(field.get("default", ""))
+    return fallback if fallback else (_enum_options(field)[0] if _enum_options(field) else "")
 
 
 def _extract_type_properties(type_id, properties):
@@ -1075,7 +1112,8 @@ def _read_type_specific_values(inputs, type_id):
             continue
         if kind == "enum":
             dd = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
-            values[key] = (dd.selectedItem.name or "") if dd and dd.selectedItem else ""
+            selected_label = (dd.selectedItem.name or "") if dd and dd.selectedItem else ""
+            values[key] = _enum_value_from_label(field, selected_label)
             continue
     return values
 
@@ -1120,12 +1158,14 @@ def _set_type_specific_form_values(inputs, type_id, properties):
                 continue
             wanted = str(value or field.get("default", "")).strip().lower()
             hit = False
-            for i in range(dd.listItems.count):
-                option = dd.listItems.item(i)
-                if (option.name or "").strip().lower() == wanted:
+            for i, option_value in enumerate(_enum_options(field)):
+                if str(option_value).strip().lower() != wanted:
+                    continue
+                if i < dd.listItems.count:
+                    option = dd.listItems.item(i)
                     option.isSelected = True
                     hit = True
-                    break
+                break
             if not hit and dd.listItems.count > 0:
                 dd.listItems.item(0).isSelected = True
 
