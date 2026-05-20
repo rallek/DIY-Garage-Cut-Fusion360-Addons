@@ -231,3 +231,42 @@ Zweck:
 Hinweis:
 
 - Die CSV-Kopfzeile bleibt unveraendert.
+
+## CSV-Export Konfiguration
+
+Datei:
+
+- `export_config.json`
+
+Aktuell relevante Einstellungen:
+
+- `csv_delimiter`: Feldtrennzeichen (z. B. `;`, `,`, `|`, `tab`)
+- `csv_decimal_separator`: Dezimaltrennzeichen (`.` oder `,`)
+- `csv_decimals`: Anzahl Nachkommastellen fuer numerische CSV-Spalten
+- `csv_decimal_mode`:
+- `fixed` = feste Nachkommastellen (z. B. `520,0`, `0,5`)
+- `trim` = unnoetige Nachkommastellen entfernen
+- `csv_material_name_mode`:
+- `material` = `material_name` entspricht `material`
+- `typed_dimensions` = materialbezogene Bezeichnung je Typ:
+- `bar`: `material` + Leerzeichen + `thickness_mm` + `x` + `width_mm`
+- `sheet`: `material` + Leerzeichen + `thickness_mm`
+
+Default im Repository:
+
+- `csv_delimiter = ;`
+- `csv_decimal_separator = ,`
+- `csv_decimals = 1`
+- `csv_decimal_mode = fixed`
+- `csv_material_name_mode = typed_dimensions`
+
+Betroffene numerische CSV-Spalten:
+
+- `length_mm`
+- `width_mm`
+- `thickness_mm`
+- `trim_allowance_mm`
+
+Zusatzspalte:
+
+- `material_name` als zuschnittorientierte Materialbezeichnung (konfigurierbar ueber `csv_material_name_mode`)

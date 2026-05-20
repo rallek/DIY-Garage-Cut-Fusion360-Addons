@@ -1,0 +1,7 @@
+{
+  "csv_delimiter": ";",
+  "csv_decimal_separator": ",",
+  "csv_decimals": 1,
+  "csv_decimal_mode": "fixed",
+  "csv_material_name_mode": "typed_dimensions"
+}

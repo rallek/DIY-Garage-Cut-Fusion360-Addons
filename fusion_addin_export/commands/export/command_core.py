@@ -1,7 +1,9 @@
 import adsk.core
 import adsk.fusion
 import csv
+import json
 import locale
+import os
 import re
 
 import export_config as config
@@ -18,6 +20,10 @@ _active_panel_id = None
 _is_started = False
 _command_created_handler = None
 _ui_lang = "de"
+_export_settings_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "export_config.json")
+)
+_export_settings_cache = None
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -172,7 +178,18 @@ def _body_to_csv_row(body, catalog):
     trim_allowance_mm = _resolve_trim_allowance_for_export(body, catalog_item.type)
     grain_direction = _resolve_grain_direction_for_export(body, catalog_item)
     material_name = str(catalog_item.name or "").strip() or "-"
-    return [name, length, width, thickness, material_type, trim_allowance_mm, grain_direction, material_name]
+    export_material_name = _build_export_material_name(catalog_item, thickness, width, material_name)
+    return [
+        name,
+        length,
+        width,
+        thickness,
+        material_type,
+        trim_allowance_mm,
+        grain_direction,
+        material_name,
+        export_material_name,
+    ]
 
 
 def _safe_body_name(body):
@@ -211,9 +228,7 @@ def _get_dimensions_for_export(body, material_type):
 def _fmt_mm(value):
     try:
         numeric = float(value)
-        if abs(numeric - round(numeric)) < 1e-9:
-            return str(int(round(numeric)))
-        return f"{numeric:.3f}".rstrip("0").rstrip(".")
+        return _format_numeric_for_export(numeric)
     except Exception:
         return "-"
 
@@ -393,6 +408,48 @@ def _material_type_supports_grain(material_type):
     return _TYPE_FIELD_HAS_GRAIN in keys and _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION in keys
 
 
+def _build_export_material_name(catalog_item, thickness, width, material_name):
+    mode = _get_csv_material_name_mode()
+    if mode == "material":
+        return material_name
+
+    thickness_label = _compact_dimension_label(thickness)
+    width_label = _compact_dimension_label(width)
+    type_id = str(getattr(catalog_item, "type", "") or "").strip().lower()
+    if type_id == "bar":
+        if _is_export_dim_value(thickness_label) and _is_export_dim_value(width_label):
+            return f"{material_name} {thickness_label}x{width_label}"
+        return material_name
+    if type_id == "sheet":
+        if _is_export_dim_value(thickness_label):
+            return f"{material_name} {thickness_label}"
+        return material_name
+    return material_name
+
+
+def _is_export_dim_value(value):
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text == "-":
+        return False
+    return True
+
+
+def _compact_dimension_label(value):
+    text = str(value or "").strip()
+    if not text or text == "-":
+        return text
+    normalized = text.replace(",", ".")
+    try:
+        numeric = float(normalized)
+    except Exception:
+        return text
+    if abs(numeric - round(numeric)) < 1e-9:
+        return str(int(round(numeric)))
+    return text
+
+
 def _write_csv(path, rows):
     header = [
         "body_name",
@@ -403,11 +460,18 @@ def _write_csv(path, rows):
         "trim_allowance_mm",
         "grain_direction",
         "material",
+        "material_name",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.writer(csv_file)
+        writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())
         writer.writerow(header)
-        writer.writerows(rows)
+        decimal_separator = _get_csv_decimal_separator()
+        decimals = _get_csv_decimals()
+        decimal_mode = _get_csv_decimal_mode()
+        for row in rows:
+            writer.writerow(
+                _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode)
+            )
 
 
 def _get_entity_token(entity):
@@ -459,6 +523,137 @@ def _try_load_catalog():
         return load_catalog()
     except Exception as exc:
         raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
+
+
+def _load_export_settings():
+    global _export_settings_cache
+    if _export_settings_cache is not None:
+        return _export_settings_cache
+
+    settings = {
+        "csv_delimiter": ";",
+        "csv_decimal_separator": ".",
+        "csv_decimals": 1,
+        "csv_decimal_mode": "fixed",
+        "csv_material_name_mode": "material",
+    }
+    try:
+        if os.path.exists(_export_settings_path):
+            with open(_export_settings_path, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                if "csv_delimiter" in loaded:
+                    settings["csv_delimiter"] = loaded.get("csv_delimiter")
+                if "csv_decimal_separator" in loaded:
+                    settings["csv_decimal_separator"] = loaded.get("csv_decimal_separator")
+                if "csv_decimals" in loaded:
+                    settings["csv_decimals"] = loaded.get("csv_decimals")
+                if "csv_decimal_mode" in loaded:
+                    settings["csv_decimal_mode"] = loaded.get("csv_decimal_mode")
+                if "csv_material_name_mode" in loaded:
+                    settings["csv_material_name_mode"] = loaded.get("csv_material_name_mode")
+    except Exception as exc:
+        print(f"CSV-Export: export_config.json konnte nicht gelesen werden: {exc}")
+
+    _export_settings_cache = settings
+    return settings
+
+
+def _get_csv_delimiter():
+    raw = _load_export_settings().get("csv_delimiter", ";")
+    text = str(raw or "").strip()
+    if text in ("\\t", "tab"):
+        return "\t"
+    if len(text) == 1:
+        return text
+    return ";"
+
+
+def _get_csv_decimal_separator():
+    raw = _load_export_settings().get("csv_decimal_separator", ".")
+    text = str(raw or "").strip()
+    if text in (".", ","):
+        return text
+    return "."
+
+
+def _get_csv_decimals():
+    raw = _load_export_settings().get("csv_decimals", 1)
+    try:
+        value = int(raw)
+    except Exception:
+        return 1
+    if value < 0:
+        return 0
+    if value > 6:
+        return 6
+    return value
+
+
+def _get_csv_decimal_mode():
+    raw = _load_export_settings().get("csv_decimal_mode", "fixed")
+    text = str(raw or "").strip().lower()
+    if text in ("fixed", "trim"):
+        return text
+    return "fixed"
+
+
+def _get_csv_material_name_mode():
+    raw = _load_export_settings().get("csv_material_name_mode", "material")
+    text = str(raw or "").strip().lower()
+    if text in ("material", "typed_dimensions"):
+        return text
+    return "material"
+
+
+def _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode):
+    # Numeric export columns by contract:
+    # 1=length_mm, 2=width_mm, 3=thickness_mm, 5=trim_allowance_mm
+    numeric_indices = {1, 2, 3, 5}
+    out = list(row)
+    for idx in numeric_indices:
+        if idx >= len(out):
+            continue
+        out[idx] = _format_csv_numeric_cell(out[idx], decimal_separator, decimals, decimal_mode)
+    return out
+
+
+def _format_csv_numeric_cell(value, decimal_separator, decimals, decimal_mode):
+    text = str(value or "").strip()
+    if not text:
+        return text
+    normalized = text.replace(",", ".")
+    try:
+        numeric = float(normalized)
+    except Exception:
+        return text
+
+    return _format_numeric_for_export(
+        numeric,
+        decimal_separator=decimal_separator,
+        decimals=decimals,
+        decimal_mode=decimal_mode,
+    )
+
+
+def _format_numeric_for_export(numeric, decimal_separator=None, decimals=None, decimal_mode=None):
+    if decimal_separator is None:
+        decimal_separator = _get_csv_decimal_separator()
+    if decimals is None:
+        decimals = _get_csv_decimals()
+    if decimal_mode is None:
+        decimal_mode = _get_csv_decimal_mode()
+
+    if decimal_mode == "fixed":
+        formatted = f"{float(numeric):.{int(decimals)}f}"
+    else:
+        formatted = f"{float(numeric):.{int(decimals)}f}".rstrip("0").rstrip(".")
+        if formatted == "-0":
+            formatted = "0"
+
+    if decimal_separator == ",":
+        return formatted.replace(".", ",")
+    return formatted
 
 
 def _detect_ui_lang():
