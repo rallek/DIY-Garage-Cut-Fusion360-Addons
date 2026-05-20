@@ -42,16 +42,16 @@ _INPUT_FILTER_TYPE = "diygc_filter_type"
 _INPUT_MATERIAL = "diygc_material"
 _INPUT_TRIM_ALLOWANCE = "diygc_trim_allowance_mm"
 _INPUT_GRAIN_DIRECTION = "diygc_grain_direction"
-_INPUT_FRONT_REFERENCE = "diygc_front_reference"
-_INPUT_SWAP_DIRECTION = "diygc_swap_direction"
+_INPUT_FRONT_FACE = "diygc_front_face"
+_INPUT_EDGES_HEADER = "diygc_edges_header"
+_INPUT_EDGE_FRONT_ENABLED = "diygc_edge_front_enabled"
 _INPUT_EDGE_FRONT = "diygc_edge_front"
+_INPUT_EDGE_BACK_ENABLED = "diygc_edge_back_enabled"
 _INPUT_EDGE_BACK = "diygc_edge_back"
+_INPUT_EDGE_LEFT_ENABLED = "diygc_edge_left_enabled"
 _INPUT_EDGE_LEFT = "diygc_edge_left"
+_INPUT_EDGE_RIGHT_ENABLED = "diygc_edge_right_enabled"
 _INPUT_EDGE_RIGHT = "diygc_edge_right"
-_INPUT_FACE_FRONT = "diygc_face_front"
-_INPUT_FACE_BACK = "diygc_face_back"
-_INPUT_FACE_LEFT = "diygc_face_left"
-_INPUT_FACE_RIGHT = "diygc_face_right"
 
 _handlers = []
 _active_panel_id = None
@@ -82,20 +82,17 @@ _STRINGS = {
         "grain_none": "Keine",
         "grain_length": "Längs",
         "grain_width": "Quer",
-        "front_reference": "Vorderkante",
-        "front_reference_long": "Vorderkante = lange Seite",
-        "front_reference_short": "Vorderkante = kurze Seite",
-        "swap_direction": "Richtung tauschen",
+        "front_face": "Vorderkante (Fläche)",
         "edges_section": "Bekantung",
         "edge_none": "(Keine Kante)",
+        "edge_front_enabled": "Vorne bekanten",
         "edge_front": "Kante vorne",
+        "edge_back_enabled": "Hinten bekanten",
         "edge_back": "Kante hinten",
+        "edge_left_enabled": "Links bekanten",
         "edge_left": "Kante links",
+        "edge_right_enabled": "Rechts bekanten",
         "edge_right": "Kante rechts",
-        "face_front": "Fläche vorne",
-        "face_back": "Fläche hinten",
-        "face_left": "Fläche links",
-        "face_right": "Fläche rechts",
         "face_prompt": "Planare Seitenfläche wählen",
     },
     "en": {
@@ -112,20 +109,17 @@ _STRINGS = {
         "grain_none": "None",
         "grain_length": "Length",
         "grain_width": "Width",
-        "front_reference": "Front reference",
-        "front_reference_long": "Front edge = long side",
-        "front_reference_short": "Front edge = short side",
-        "swap_direction": "Swap direction",
+        "front_face": "Front edge (face)",
         "edges_section": "Edge banding",
         "edge_none": "(No edge)",
+        "edge_front_enabled": "Band front",
         "edge_front": "Front edge",
+        "edge_back_enabled": "Band back",
         "edge_back": "Back edge",
+        "edge_left_enabled": "Band left",
         "edge_left": "Left edge",
+        "edge_right_enabled": "Band right",
         "edge_right": "Right edge",
-        "face_front": "Front face",
-        "face_back": "Back face",
-        "face_left": "Left face",
-        "face_right": "Right face",
         "face_prompt": "Select planar side face",
     },
 }
@@ -208,58 +202,45 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         _populate_grain_direction_dropdown(grain_pick, "none")
         grain_pick.isVisible = False
+        front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
+        front_face.addSelectionFilter("PlanarFaces")
+        front_face.setSelectionLimits(0, 1)
 
-        front_ref = inputs.addDropDownCommandInput(
-            _INPUT_FRONT_REFERENCE,
-            _t("front_reference"),
-            adsk.core.DropDownStyles.TextListDropDownStyle,
-        )
-        _populate_front_reference_dropdown(front_ref, "long_side")
-
-        swap_direction = inputs.addBoolValueInput(
-            _INPUT_SWAP_DIRECTION,
-            _t("swap_direction"),
-            True,
-            "",
-            False,
-        )
-        swap_direction.tooltip = _t("swap_direction")
-
-        edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGE_FRONT + "_header", "", _t("edges_section"), 1, True)
+        edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGES_HEADER, "", _t("edges_section"), 1, True)
         edges_header.isFullWidth = True
 
+        edge_front_enabled = inputs.addBoolValueInput(
+            _INPUT_EDGE_FRONT_ENABLED, _t("edge_front_enabled"), True, "", False
+        )
         edge_front = inputs.addDropDownCommandInput(
-            _INPUT_EDGE_FRONT,
-            _t("edge_front"),
-            adsk.core.DropDownStyles.TextListDropDownStyle,
+            _INPUT_EDGE_FRONT, _t("edge_front"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        edge_back_enabled = inputs.addBoolValueInput(
+            _INPUT_EDGE_BACK_ENABLED, _t("edge_back_enabled"), True, "", False
         )
         edge_back = inputs.addDropDownCommandInput(
-            _INPUT_EDGE_BACK,
-            _t("edge_back"),
-            adsk.core.DropDownStyles.TextListDropDownStyle,
+            _INPUT_EDGE_BACK, _t("edge_back"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        edge_left_enabled = inputs.addBoolValueInput(
+            _INPUT_EDGE_LEFT_ENABLED, _t("edge_left_enabled"), True, "", False
         )
         edge_left = inputs.addDropDownCommandInput(
-            _INPUT_EDGE_LEFT,
-            _t("edge_left"),
-            adsk.core.DropDownStyles.TextListDropDownStyle,
+            _INPUT_EDGE_LEFT, _t("edge_left"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        edge_right_enabled = inputs.addBoolValueInput(
+            _INPUT_EDGE_RIGHT_ENABLED, _t("edge_right_enabled"), True, "", False
         )
         edge_right = inputs.addDropDownCommandInput(
-            _INPUT_EDGE_RIGHT,
-            _t("edge_right"),
-            adsk.core.DropDownStyles.TextListDropDownStyle,
+            _INPUT_EDGE_RIGHT, _t("edge_right"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
         _populate_edge_dropdown(edge_front, None)
         _populate_edge_dropdown(edge_back, None)
         _populate_edge_dropdown(edge_left, None)
         _populate_edge_dropdown(edge_right, None)
 
-        face_front = inputs.addSelectionInput(_INPUT_FACE_FRONT, _t("face_front"), _t("face_prompt"))
-        face_back = inputs.addSelectionInput(_INPUT_FACE_BACK, _t("face_back"), _t("face_prompt"))
-        face_left = inputs.addSelectionInput(_INPUT_FACE_LEFT, _t("face_left"), _t("face_prompt"))
-        face_right = inputs.addSelectionInput(_INPUT_FACE_RIGHT, _t("face_right"), _t("face_prompt"))
-        for face_sel in (face_front, face_back, face_left, face_right):
-            face_sel.addSelectionFilter("PlanarFaces")
-            face_sel.setSelectionLimits(0, 1)
+        _set_main_controls_visible(inputs, False)
+        _set_edge_controls_visible(inputs, False)
+        _set_edge_dropdown_enabled_state(inputs)
 
         on_input_changed = _InputChangedHandler()
         cmd.inputChanged.add(on_input_changed)
@@ -312,29 +293,27 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     _set_grain_direction_dropdown(inputs, entry.default_grain_direction)
                 return
 
-            if changed.id == _INPUT_SWAP_DIRECTION:
-                swap_input = adsk.core.BoolValueCommandInput.cast(changed)
-                if swap_input and swap_input.value:
-                    _swap_edge_side_inputs(inputs)
-                    swap_input.value = False
-                return
-
-            if changed.id == _INPUT_FRONT_REFERENCE:
+            if changed.id == _INPUT_FRONT_FACE:
                 body = _read_selected_body(inputs)
                 if body:
-                    _auto_assign_side_faces(inputs, body, _read_front_reference_dropdown(inputs))
+                    _validate_front_face_selection(inputs, body)
+                    _sync_edge_controls_from_body_attributes(inputs, body)
+                    _set_edge_dropdown_enabled_state(inputs)
+                    _apply_edge_appearance_preview(inputs)
+                return
+
+            if changed.id in (
+                _INPUT_EDGE_FRONT_ENABLED,
+                _INPUT_EDGE_BACK_ENABLED,
+                _INPUT_EDGE_LEFT_ENABLED,
+                _INPUT_EDGE_RIGHT_ENABLED,
+            ):
+                _set_edge_dropdown_enabled_state(inputs)
+                _apply_edge_appearance_preview(inputs)
                 return
 
             if changed.id in (_INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
-                side = _input_id_to_side(changed.id)
-                if side:
-                    _apply_edge_appearance_preview_for_side(inputs, side)
-                return
-
-            if changed.id in (_INPUT_FACE_FRONT, _INPUT_FACE_BACK, _INPUT_FACE_LEFT, _INPUT_FACE_RIGHT):
-                side = _face_input_id_to_side(changed.id)
-                if side:
-                    _apply_edge_appearance_preview_for_side(inputs, side)
+                _apply_edge_appearance_preview(inputs)
                 return
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
@@ -384,26 +363,27 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             else:
                 _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
 
-            front_reference = _read_front_reference_dropdown(inputs)
-            _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
-
-            edge_values = {
-                ATTR_KEY_EDGE_FRONT: _read_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT),
-                ATTR_KEY_EDGE_BACK: _read_edge_dropdown_value(inputs, _INPUT_EDGE_BACK),
-                ATTR_KEY_EDGE_LEFT: _read_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT),
-                ATTR_KEY_EDGE_RIGHT: _read_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT),
-            }
-            for attr_key, edge_id in edge_values.items():
-                if edge_id:
-                    _write_body_attribute_or_raise(body, attr_key, edge_id)
-                else:
-                    _clear_body_attribute_or_raise(body, attr_key)
+            side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
+            if not side_faces:
+                _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
+                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT)
+                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK)
+                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT)
+                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
+            else:
+                _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
+                edge_values = _read_enabled_edge_values(inputs, require_material=True)
+                for attr_key, edge_id in edge_values.items():
+                    if edge_id:
+                        _write_body_attribute_or_raise(body, attr_key, edge_id)
+                    else:
+                        _clear_body_attribute_or_raise(body, attr_key)
 
             if material_id != old_material_id:
                 _apply_material_appearance_or_raise(body, material_id)
 
-            for side in ("front", "back", "left", "right"):
-                _apply_edge_appearance_for_side(inputs, body, side)
+            if side_faces:
+                _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_enabled_edge_values(inputs))
 
             if _is_body_likely_read_only(body):
                 diag = _diagnose_attribute_context(body)
@@ -554,16 +534,23 @@ def _refresh_inputs_from_selected_body(inputs):
         _update_trim_allowance_visibility(inputs, None)
         _set_grain_direction_dropdown(inputs, "none")
         _update_grain_direction_visibility(inputs, None)
-        _set_front_reference_dropdown(inputs, "long_side")
+        _set_front_face_selection(inputs, None)
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, "")
-        _clear_face_selection(inputs, "front")
-        _clear_face_selection(inputs, "back")
-        _clear_face_selection(inputs, "left")
-        _clear_face_selection(inputs, "right")
+        _set_edge_enabled(inputs, _INPUT_EDGE_FRONT_ENABLED, False)
+        _set_edge_enabled(inputs, _INPUT_EDGE_BACK_ENABLED, False)
+        _set_edge_enabled(inputs, _INPUT_EDGE_LEFT_ENABLED, False)
+        _set_edge_enabled(inputs, _INPUT_EDGE_RIGHT_ENABLED, False)
+        _set_main_controls_visible(inputs, False)
+        _set_edge_controls_visible(inputs, False)
         return
+
+    _set_main_controls_visible(inputs, True)
+    front_face = _selected_front_face(inputs)
+    if front_face and not _face_belongs_to_body(front_face, body):
+        _set_front_face_selection(inputs, None)
 
     _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
     material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
@@ -593,16 +580,10 @@ def _refresh_inputs_from_selected_body(inputs):
     else:
         _set_grain_direction_dropdown(inputs, "none")
 
-    front_reference = str(_get_attr(body, ATTR_KEY_FRONT_REFERENCE, "long_side") or "long_side").strip().lower()
-    if front_reference not in ("long_side", "short_side"):
-        front_reference = "long_side"
-    _set_front_reference_dropdown(inputs, front_reference)
-
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, str(_get_attr(body, ATTR_KEY_EDGE_FRONT, "") or "").strip())
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, str(_get_attr(body, ATTR_KEY_EDGE_BACK, "") or "").strip())
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, str(_get_attr(body, ATTR_KEY_EDGE_LEFT, "") or "").strip())
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, str(_get_attr(body, ATTR_KEY_EDGE_RIGHT, "") or "").strip())
-    _auto_assign_side_faces(inputs, body, front_reference)
+    _ensure_front_face_from_attributes(inputs, body)
+    _sync_edge_controls_from_body_attributes(inputs, body)
+    _set_edge_dropdown_enabled_state(inputs)
+    _set_edge_controls_visible(inputs, bool(_selected_front_face(inputs)))
 
 
 def _populate_material_dropdown(dropdown, selected_material_id=None, filter_type=None):
@@ -633,36 +614,68 @@ def _populate_material_dropdown(dropdown, selected_material_id=None, filter_type
         dropdown.listItems.item(0).isSelected = True
 
 
-def _populate_front_reference_dropdown(dropdown, selected_value):
-    if not dropdown:
+def _set_main_controls_visible(inputs, visible):
+    main_ids = (
+        _INPUT_SIZE,
+        _INPUT_FILTER_TYPE,
+        _INPUT_MATERIAL,
+        _INPUT_TRIM_ALLOWANCE,
+        _INPUT_GRAIN_DIRECTION,
+        _INPUT_FRONT_FACE,
+    )
+    for input_id in main_ids:
+        item = inputs.itemById(input_id)
+        if item:
+            item.isVisible = bool(visible)
+
+
+def _set_edge_controls_visible(inputs, visible):
+    edge_ids = (
+        _INPUT_EDGES_HEADER,
+        _INPUT_EDGE_FRONT_ENABLED,
+        _INPUT_EDGE_FRONT,
+        _INPUT_EDGE_BACK_ENABLED,
+        _INPUT_EDGE_BACK,
+        _INPUT_EDGE_LEFT_ENABLED,
+        _INPUT_EDGE_LEFT,
+        _INPUT_EDGE_RIGHT_ENABLED,
+        _INPUT_EDGE_RIGHT,
+    )
+    for input_id in edge_ids:
+        item = inputs.itemById(input_id)
+        if item:
+            item.isVisible = bool(visible)
+
+
+def _front_face_selection_input(inputs):
+    return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_FRONT_FACE))
+
+
+def _selected_front_face(inputs):
+    sel = _front_face_selection_input(inputs)
+    if not sel or sel.selectionCount < 1:
+        return None
+    face = adsk.fusion.BRepFace.cast(sel.selection(0).entity)
+    if not face:
+        return None
+    native = adsk.fusion.BRepFace.cast(getattr(face, "nativeObject", None))
+    return native if native else face
+
+
+def _set_front_face_selection(inputs, face):
+    sel = _front_face_selection_input(inputs)
+    if not sel:
         return
-    dropdown.listItems.clear()
-    wanted = str(selected_value or "long_side").strip().lower()
-    if wanted not in ("long_side", "short_side"):
-        wanted = "long_side"
-    options = [
-        ("long_side", _t("front_reference_long")),
-        ("short_side", _t("front_reference_short")),
-    ]
-    for value, label in options:
-        dropdown.listItems.add(label, value == wanted)
-
-
-def _set_front_reference_dropdown(inputs, value):
-    dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_FRONT_REFERENCE))
-    _populate_front_reference_dropdown(dropdown, value)
-
-
-def _read_front_reference_dropdown(inputs):
-    label = _read_dropdown_value(inputs, _INPUT_FRONT_REFERENCE, "")
-    mapping = {
-        _t("front_reference_long").lower(): "long_side",
-        _t("front_reference_short").lower(): "short_side",
-    }
-    value = mapping.get(label.lower(), "long_side")
-    if value not in ("long_side", "short_side"):
-        return "long_side"
-    return value
+    try:
+        sel.clearSelection()
+    except Exception:
+        pass
+    if not face:
+        return
+    try:
+        sel.addSelection(face)
+    except Exception as exc:
+        print(f"Properties: Vorderkantenfläche konnte nicht gesetzt werden: {exc}")
 
 
 def _format_edge_label(entry):
@@ -709,24 +722,32 @@ def _read_edge_dropdown_value(inputs, input_id):
     return edge_id
 
 
-def _input_id_to_side(input_id):
-    mapping = {
-        _INPUT_EDGE_FRONT: "front",
-        _INPUT_EDGE_BACK: "back",
-        _INPUT_EDGE_LEFT: "left",
-        _INPUT_EDGE_RIGHT: "right",
-    }
-    return mapping.get(input_id)
+def _edge_enabled_input(inputs, enabled_input_id):
+    return adsk.core.BoolValueCommandInput.cast(inputs.itemById(enabled_input_id))
 
 
-def _face_input_id_to_side(input_id):
+def _is_edge_enabled(inputs, enabled_input_id):
+    item = _edge_enabled_input(inputs, enabled_input_id)
+    return bool(item and item.value)
+
+
+def _set_edge_enabled(inputs, enabled_input_id, enabled):
+    item = _edge_enabled_input(inputs, enabled_input_id)
+    if item:
+        item.value = bool(enabled)
+
+
+def _set_edge_dropdown_enabled_state(inputs):
     mapping = {
-        _INPUT_FACE_FRONT: "front",
-        _INPUT_FACE_BACK: "back",
-        _INPUT_FACE_LEFT: "left",
-        _INPUT_FACE_RIGHT: "right",
+        _INPUT_EDGE_FRONT_ENABLED: _INPUT_EDGE_FRONT,
+        _INPUT_EDGE_BACK_ENABLED: _INPUT_EDGE_BACK,
+        _INPUT_EDGE_LEFT_ENABLED: _INPUT_EDGE_LEFT,
+        _INPUT_EDGE_RIGHT_ENABLED: _INPUT_EDGE_RIGHT,
     }
-    return mapping.get(input_id)
+    for enabled_id, dropdown_id in mapping.items():
+        dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(dropdown_id))
+        if dropdown:
+            dropdown.isEnabled = _is_edge_enabled(inputs, enabled_id)
 
 
 def _set_filter_dropdown_value(inputs, type_id):
@@ -801,179 +822,170 @@ def _material_requires_grain_direction(entry):
     return str(entry.sheet_has_grain or "").strip().lower() == "yes"
 
 
-def _swap_edge_side_inputs(inputs):
-    front_edge = _read_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT)
-    back_edge = _read_edge_dropdown_value(inputs, _INPUT_EDGE_BACK)
-    left_edge = _read_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT)
-    right_edge = _read_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT)
-
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, back_edge)
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, front_edge)
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, right_edge)
-    _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, left_edge)
-
-    _swap_face_selections(inputs, "front", "back")
-    _swap_face_selections(inputs, "left", "right")
+def _validate_front_face_selection(inputs, body):
+    front_face = _selected_front_face(inputs)
+    if not front_face:
+        _set_edge_controls_visible(inputs, False)
+        return
+    if not _face_belongs_to_body(front_face, body):
+        _set_front_face_selection(inputs, None)
+        _set_edge_controls_visible(inputs, False)
+        raise RuntimeError("Gewählte Vorderkantenfläche gehört nicht zum ausgewählten Body.")
+    _set_edge_controls_visible(inputs, True)
 
 
-def _selection_input_for_side(inputs, side):
-    mapping = {
-        "front": _INPUT_FACE_FRONT,
-        "back": _INPUT_FACE_BACK,
-        "left": _INPUT_FACE_LEFT,
-        "right": _INPUT_FACE_RIGHT,
+def _face_belongs_to_body(face, body):
+    face_body = adsk.fusion.BRepBody.cast(getattr(face, "body", None))
+    if not face_body:
+        return False
+    native_face_body = adsk.fusion.BRepBody.cast(getattr(face_body, "nativeObject", None))
+    native_body = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
+    return face_body is body or face_body is native_body or native_face_body is body or native_face_body is native_body
+
+
+def _ensure_front_face_from_attributes(inputs, body):
+    if _selected_front_face(inputs):
+        return
+    front_reference = str(_get_attr(body, ATTR_KEY_FRONT_REFERENCE, "") or "").strip().lower()
+    if front_reference not in ("long_side", "short_side"):
+        return
+    if not _has_any_edge_attribute(body):
+        return
+    canonical_faces = _detect_canonical_side_faces(body)
+    key = "long_pos" if front_reference == "long_side" else "short_pos"
+    _set_front_face_selection(inputs, canonical_faces.get(key))
+
+
+def _has_any_edge_attribute(body):
+    for key in (ATTR_KEY_EDGE_FRONT, ATTR_KEY_EDGE_BACK, ATTR_KEY_EDGE_LEFT, ATTR_KEY_EDGE_RIGHT):
+        if str(_get_attr(body, key, "") or "").strip():
+            return True
+    return False
+
+
+def _sync_edge_controls_from_body_attributes(inputs, body):
+    values = {
+        ATTR_KEY_EDGE_FRONT: str(_get_attr(body, ATTR_KEY_EDGE_FRONT, "") or "").strip(),
+        ATTR_KEY_EDGE_BACK: str(_get_attr(body, ATTR_KEY_EDGE_BACK, "") or "").strip(),
+        ATTR_KEY_EDGE_LEFT: str(_get_attr(body, ATTR_KEY_EDGE_LEFT, "") or "").strip(),
+        ATTR_KEY_EDGE_RIGHT: str(_get_attr(body, ATTR_KEY_EDGE_RIGHT, "") or "").strip(),
     }
-    input_id = mapping.get(side)
-    if not input_id:
-        return None
-    return adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
+    _set_edge_enabled(inputs, _INPUT_EDGE_FRONT_ENABLED, bool(values[ATTR_KEY_EDGE_FRONT]))
+    _set_edge_enabled(inputs, _INPUT_EDGE_BACK_ENABLED, bool(values[ATTR_KEY_EDGE_BACK]))
+    _set_edge_enabled(inputs, _INPUT_EDGE_LEFT_ENABLED, bool(values[ATTR_KEY_EDGE_LEFT]))
+    _set_edge_enabled(inputs, _INPUT_EDGE_RIGHT_ENABLED, bool(values[ATTR_KEY_EDGE_RIGHT]))
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, values[ATTR_KEY_EDGE_FRONT])
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, values[ATTR_KEY_EDGE_BACK])
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, values[ATTR_KEY_EDGE_LEFT])
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, values[ATTR_KEY_EDGE_RIGHT])
 
 
-def _selected_face_for_side(inputs, side):
-    selection_input = _selection_input_for_side(inputs, side)
-    if not selection_input or selection_input.selectionCount < 1:
-        return None
-    face = adsk.fusion.BRepFace.cast(selection_input.selection(0).entity)
-    if not face:
-        return None
-    native = adsk.fusion.BRepFace.cast(getattr(face, "nativeObject", None))
-    return native if native else face
+def _read_enabled_edge_values(inputs, require_material=False):
+    mapping = {
+        ATTR_KEY_EDGE_FRONT: (_INPUT_EDGE_FRONT_ENABLED, _INPUT_EDGE_FRONT),
+        ATTR_KEY_EDGE_BACK: (_INPUT_EDGE_BACK_ENABLED, _INPUT_EDGE_BACK),
+        ATTR_KEY_EDGE_LEFT: (_INPUT_EDGE_LEFT_ENABLED, _INPUT_EDGE_LEFT),
+        ATTR_KEY_EDGE_RIGHT: (_INPUT_EDGE_RIGHT_ENABLED, _INPUT_EDGE_RIGHT),
+    }
+    values = {}
+    for attr_key, (enabled_id, dropdown_id) in mapping.items():
+        if not _is_edge_enabled(inputs, enabled_id):
+            values[attr_key] = ""
+            continue
+        edge_id = _read_edge_dropdown_value(inputs, dropdown_id)
+        if require_material and not edge_id:
+            raise RuntimeError("Für aktivierte Bekantung muss ein Kantenmaterial gewählt werden.")
+        values[attr_key] = edge_id
+    return values
 
 
-def _clear_face_selection(inputs, side):
-    selection_input = _selection_input_for_side(inputs, side)
-    if not selection_input:
-        return
-    try:
-        selection_input.clearSelection()
-    except Exception:
-        pass
-
-
-def _set_face_selection(inputs, side, face):
-    selection_input = _selection_input_for_side(inputs, side)
-    if not selection_input:
-        return
-    try:
-        selection_input.clearSelection()
-    except Exception:
-        pass
-    if not face:
-        return
-    try:
-        selection_input.addSelection(face)
-    except Exception as exc:
-        print(f"Properties: Fläche für Seite '{side}' konnte nicht gesetzt werden: {exc}")
-
-
-def _swap_face_selections(inputs, side_a, side_b):
-    face_a = _selected_face_for_side(inputs, side_a)
-    face_b = _selected_face_for_side(inputs, side_b)
-    _set_face_selection(inputs, side_a, face_b)
-    _set_face_selection(inputs, side_b, face_a)
-
-
-def _apply_edge_appearance_preview_for_side(inputs, side):
+def _apply_edge_appearance_preview(inputs):
     body = _read_selected_body(inputs)
     if not body:
         return
     try:
-        _apply_edge_appearance_for_side(inputs, body, side)
+        side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
+        if not side_faces:
+            _set_edge_controls_visible(inputs, False)
+            return
+        _set_edge_controls_visible(inputs, True)
+        _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_enabled_edge_values(inputs))
     except Exception as exc:
-        print(f"Properties: Preview-Kante '{side}' fehlgeschlagen: {exc}")
+        print(f"Properties: Kanten-Preview fehlgeschlagen: {exc}")
 
 
-def _apply_edge_appearance_for_side(inputs, body, side):
-    edge_input_id = {
-        "front": _INPUT_EDGE_FRONT,
-        "back": _INPUT_EDGE_BACK,
-        "left": _INPUT_EDGE_LEFT,
-        "right": _INPUT_EDGE_RIGHT,
-    }.get(side)
-    if not edge_input_id:
-        return
-    edge_id = _read_edge_dropdown_value(inputs, edge_input_id)
-    if not edge_id:
-        return
-
-    face = _selected_face_for_side(inputs, side)
-    if not face:
-        face_map = _auto_detect_side_faces(body, _read_front_reference_dropdown(inputs))
-        face = face_map.get(side)
-    if not face:
-        return
-
-    face_body = adsk.fusion.BRepBody.cast(getattr(face, "body", None))
-    face_body_native = adsk.fusion.BRepBody.cast(getattr(face_body, "nativeObject", None)) if face_body else None
-    body_native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
-    if face_body and face_body is not body and face_body_native is not body and body_native is not face_body:
-        raise RuntimeError("Gewählte Fläche gehört nicht zum ausgewählten Body.")
-
-    side_detected = _side_for_face(body, face, _read_front_reference_dropdown(inputs))
-    if side_detected != side:
-        raise RuntimeError(
-            f"Gewählte Fläche passt nicht zu Seite '{side}' (erkannt: '{side_detected or '-'}')."
-        )
-
-    edge_entry = _edge_by_id.get(edge_id)
-    if not edge_entry:
-        raise RuntimeError(f"Kantenmaterial '{edge_id}' ist nicht im Katalog vorhanden.")
-
-    appearance = _find_appearance_by_name(edge_entry.appearance_name)
-    if not appearance:
-        raise RuntimeError(
-            f"Appearance '{edge_entry.appearance_name}' aus Kantenmaterial '{edge_id}' wurde nicht gefunden."
-        )
-    try:
-        face.appearance = appearance
-    except Exception as exc:
-        raise RuntimeError(f"Kanten-Appearance konnte nicht gesetzt werden: {exc}") from exc
+def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
+    attr_to_side = {
+        ATTR_KEY_EDGE_FRONT: "front",
+        ATTR_KEY_EDGE_BACK: "back",
+        ATTR_KEY_EDGE_LEFT: "left",
+        ATTR_KEY_EDGE_RIGHT: "right",
+    }
+    for attr_key, side in attr_to_side.items():
+        edge_id = str(edge_values.get(attr_key, "") or "").strip()
+        if not edge_id:
+            continue
+        face = side_faces.get(side)
+        if not face:
+            continue
+        edge_entry = _edge_by_id.get(edge_id)
+        if not edge_entry:
+            raise RuntimeError(f"Kantenmaterial '{edge_id}' ist nicht im Katalog vorhanden.")
+        appearance = _find_appearance_by_name(edge_entry.appearance_name)
+        if not appearance:
+            raise RuntimeError(
+                f"Appearance '{edge_entry.appearance_name}' aus Kantenmaterial '{edge_id}' wurde nicht gefunden."
+            )
+        try:
+            face.appearance = appearance
+        except Exception as exc:
+            raise RuntimeError(f"Kanten-Appearance konnte nicht gesetzt werden: {exc}") from exc
 
 
-def _auto_assign_side_faces(inputs, body, front_reference):
-    face_map = _auto_detect_side_faces(body, front_reference)
-    for side in ("front", "back", "left", "right"):
-        _set_face_selection(inputs, side, face_map.get(side))
+def _resolve_side_faces_from_front_selection(inputs, body):
+    front_face = _selected_front_face(inputs)
+    if not front_face:
+        return {}, ""
+    axis_info = _edge_axis_info(body)
+    if not axis_info:
+        raise RuntimeError("Bauteilachsen konnten nicht bestimmt werden.")
+    front_key = _canonical_key_for_face(body, front_face, axis_info)
+    if not front_key:
+        raise RuntimeError("Vorderkantenfläche ist keine gültige Seitenfläche.")
 
-
-def _auto_detect_side_faces(body, front_reference):
     canonical_faces = _detect_canonical_side_faces(body)
-    mapped_sides = _canonical_to_named_sides(canonical_faces, front_reference)
-    return {
-        "front": mapped_sides.get("front"),
-        "back": mapped_sides.get("back"),
-        "left": mapped_sides.get("left"),
-        "right": mapped_sides.get("right"),
-    }
+    side_faces = {"front": front_face}
+    back_key = _opposite_canonical_key(front_key)
+    if back_key in canonical_faces:
+        side_faces["back"] = canonical_faces[back_key]
 
+    front_axis_idx, _front_sign = _canonical_key_axis_and_sign(front_key, axis_info)
+    front_reference = "long_side" if front_axis_idx == axis_info["long_idx"] else "short_side"
 
-def _canonical_to_named_sides(canonical_faces, front_reference):
-    front_ref = str(front_reference or "long_side").strip().lower()
-    if front_ref not in ("long_side", "short_side"):
-        front_ref = "long_side"
-    if front_ref == "long_side":
-        return {
-            "front": canonical_faces.get("long_pos"),
-            "back": canonical_faces.get("long_neg"),
-            "left": canonical_faces.get("short_neg"),
-            "right": canonical_faces.get("short_pos"),
-        }
-    return {
-        "front": canonical_faces.get("short_pos"),
-        "back": canonical_faces.get("short_neg"),
-        "left": canonical_faces.get("long_pos"),
-        "right": canonical_faces.get("long_neg"),
-    }
+    remaining = [key for key in canonical_faces.keys() if key not in (front_key, back_key)]
+    if len(remaining) >= 2:
+        front_vec = _axis_vector(*_canonical_key_axis_and_sign(front_key, axis_info))
+        up_vec = _axis_vector(axis_info["thickness_idx"], 1)
+        right_vec = _cross(up_vec, front_vec)
+        scored = []
+        for key in remaining:
+            face = canonical_faces[key]
+            normal = _face_normal(face)
+            if normal is None:
+                continue
+            score = _dot((normal.x, normal.y, normal.z), right_vec)
+            scored.append((score, face))
+        if scored:
+            scored.sort(key=lambda item: item[0])
+            side_faces["left"] = scored[0][1]
+            side_faces["right"] = scored[-1][1]
+    return side_faces, front_reference
 
 
 def _detect_canonical_side_faces(body):
     axis_info = _edge_axis_info(body)
     if not axis_info:
         return {}
-    long_idx = axis_info["long_idx"]
-    short_idx = axis_info["short_idx"]
-    thickness_idx = axis_info["thickness_idx"]
-
     best = {}
     faces = getattr(body, "faces", None)
     if not faces:
@@ -982,25 +994,72 @@ def _detect_canonical_side_faces(body):
         face = adsk.fusion.BRepFace.cast(faces.item(i))
         if not face:
             continue
-        normal = _face_normal(face)
-        if normal is None:
+        key = _canonical_key_for_face(body, face, axis_info)
+        if not key:
             continue
-        dominant_idx, dominant_value = _dominant_axis(normal)
-        if dominant_idx is None or dominant_idx == thickness_idx:
-            continue
-        if abs(dominant_value) < 0.9:
-            continue
-        if dominant_idx == long_idx:
-            canonical = "long_pos" if dominant_value >= 0 else "long_neg"
-        elif dominant_idx == short_idx:
-            canonical = "short_pos" if dominant_value >= 0 else "short_neg"
-        else:
-            continue
-        score = abs(dominant_value) + float(getattr(face, "area", 0.0))
-        existing = best.get(canonical)
+        score = abs(_dominant_axis(_face_normal(face))[1]) + float(getattr(face, "area", 0.0))
+        existing = best.get(key)
         if not existing or score > existing[0]:
-            best[canonical] = (score, face)
+            best[key] = (score, face)
     return {key: value[1] for key, value in best.items()}
+
+
+def _canonical_key_for_face(body, face, axis_info=None):
+    axis_info = axis_info or _edge_axis_info(body)
+    if not axis_info:
+        return None
+    normal = _face_normal(face)
+    if normal is None:
+        return None
+    dominant_idx, dominant_value = _dominant_axis(normal)
+    if dominant_idx is None or dominant_idx == axis_info["thickness_idx"]:
+        return None
+    if abs(dominant_value) < 0.9:
+        return None
+    if dominant_idx == axis_info["long_idx"]:
+        return "long_pos" if dominant_value >= 0 else "long_neg"
+    if dominant_idx == axis_info["short_idx"]:
+        return "short_pos" if dominant_value >= 0 else "short_neg"
+    return None
+
+
+def _opposite_canonical_key(key):
+    mapping = {
+        "long_pos": "long_neg",
+        "long_neg": "long_pos",
+        "short_pos": "short_neg",
+        "short_neg": "short_pos",
+    }
+    return mapping.get(key, "")
+
+
+def _canonical_key_axis_and_sign(key, axis_info):
+    if key.startswith("long_"):
+        axis_idx = axis_info["long_idx"]
+    else:
+        axis_idx = axis_info["short_idx"]
+    sign = 1 if key.endswith("_pos") else -1
+    return axis_idx, sign
+
+
+def _axis_vector(axis_idx, sign):
+    vec = [0.0, 0.0, 0.0]
+    if axis_idx is None or axis_idx < 0 or axis_idx > 2:
+        return tuple(vec)
+    vec[axis_idx] = 1.0 if sign >= 0 else -1.0
+    return tuple(vec)
+
+
+def _cross(a, b):
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def _dot(a, b):
+    return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2])
 
 
 def _edge_axis_info(body):
@@ -1039,34 +1098,14 @@ def _face_normal(face):
 
 
 def _dominant_axis(vector):
+    if vector is None:
+        return None, 0.0
     try:
         components = [float(vector.x), float(vector.y), float(vector.z)]
     except Exception:
         return None, 0.0
     idx = max(range(3), key=lambda i: abs(components[i]))
     return idx, components[idx]
-
-
-def _side_for_face(body, face, front_reference):
-    axis_info = _edge_axis_info(body)
-    if not axis_info:
-        return None
-    normal = _face_normal(face)
-    if normal is None:
-        return None
-    dominant_idx, dominant_value = _dominant_axis(normal)
-    if dominant_idx is None or dominant_idx == axis_info["thickness_idx"]:
-        return None
-    canonical = None
-    if dominant_idx == axis_info["long_idx"]:
-        canonical = "long_pos" if dominant_value >= 0 else "long_neg"
-    elif dominant_idx == axis_info["short_idx"]:
-        canonical = "short_pos" if dominant_value >= 0 else "short_neg"
-    named = _canonical_to_named_sides({canonical: face}, front_reference)
-    for side, side_face in named.items():
-        if side_face is face:
-            return side
-    return None
 
 
 def _write_body_attribute_or_raise(body, key, value):
