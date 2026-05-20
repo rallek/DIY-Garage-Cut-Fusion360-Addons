@@ -74,6 +74,7 @@ _edge_entries = []
 _edge_by_id = {}
 _edge_label_to_id = {}
 _edge_id_to_label = {}
+_body_token = ""
 _front_face_token = ""
 _front_body_token = ""
 _ui_lang = "de"
@@ -202,6 +203,10 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         sel = inputs.addSelectionInput(_INPUT_BODY, _t("body"), _t("body_prompt"))
         sel.addSelectionFilter("Bodies")
         sel.setSelectionLimits(1, 1)
+        try:
+            sel.isUseCurrentSelections = False
+        except Exception:
+            pass
 
         size_box = inputs.addTextBoxCommandInput(_INPUT_SIZE, _t("size"), "-", 1, True)
         size_box.isFullWidth = False
@@ -236,6 +241,10 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
         front_face.addSelectionFilter("PlanarFaces")
         front_face.setSelectionLimits(0, 1)
+        try:
+            front_face.isUseCurrentSelections = False
+        except Exception:
+            pass
 
         edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGES_HEADER, "", _t("edges_section"), 1, True)
         edges_header.isFullWidth = True
@@ -771,11 +780,62 @@ def _front_face_selection_input(inputs):
     return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_FRONT_FACE))
 
 
-def _selection_face_by_input_id(inputs, input_id):
+def _body_selection_input(inputs):
+    return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_BODY))
+
+
+def _selection_entity_by_input_id(inputs, input_id):
     sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
     if not sel or sel.selectionCount < 1:
         return None
-    face = adsk.fusion.BRepFace.cast(sel.selection(0).entity)
+    try:
+        return sel.selection(0).entity
+    except Exception:
+        return None
+
+
+def _same_entity(left, right):
+    left_token = _get_entity_token(left) or ""
+    right_token = _get_entity_token(right) or ""
+    return bool(left_token and right_token and left_token == right_token)
+
+
+def _set_selection_entity_by_input_id(inputs, input_id, entity):
+    sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
+    if not sel:
+        return False
+    current = _selection_entity_by_input_id(inputs, input_id)
+    if not entity:
+        try:
+            sel.clearSelection()
+            return True
+        except Exception:
+            return False
+    if current and _same_entity(current, entity):
+        return True
+
+    previous = current
+    try:
+        sel.clearSelection()
+    except Exception:
+        pass
+    try:
+        ok = sel.addSelection(entity)
+        if ok:
+            return True
+    except Exception as exc:
+        print(f"Properties: Auswahl konnte nicht gesetzt werden ({input_id}): {exc}")
+    if previous:
+        try:
+            sel.addSelection(previous)
+        except Exception:
+            pass
+    return False
+
+
+def _selection_face_by_input_id(inputs, input_id):
+    entity = _selection_entity_by_input_id(inputs, input_id)
+    face = adsk.fusion.BRepFace.cast(entity)
     if not face:
         return None
     native = adsk.fusion.BRepFace.cast(getattr(face, "nativeObject", None))
@@ -783,19 +843,7 @@ def _selection_face_by_input_id(inputs, input_id):
 
 
 def _set_selection_face_by_input_id(inputs, input_id, face):
-    sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
-    if not sel:
-        return
-    try:
-        sel.clearSelection()
-    except Exception:
-        pass
-    if not face:
-        return
-    try:
-        sel.addSelection(face)
-    except Exception as exc:
-        print(f"Properties: Fläche konnte nicht gesetzt werden ({input_id}): {exc}")
+    _set_selection_entity_by_input_id(inputs, input_id, face)
 
 
 def _selected_front_face(inputs):
@@ -804,6 +852,20 @@ def _selected_front_face(inputs):
 
 def _set_front_face_selection(inputs, face):
     _set_selection_face_by_input_id(inputs, _INPUT_FRONT_FACE, face)
+
+
+def _set_body_selection(inputs, body):
+    _set_selection_entity_by_input_id(inputs, _INPUT_BODY, body)
+
+
+def _clear_body_selection_memory():
+    global _body_token
+    _body_token = ""
+
+
+def _remember_body_selection(body):
+    global _body_token
+    _body_token = _get_entity_token(body) or ""
 
 
 def _clear_front_face_memory():
@@ -836,6 +898,31 @@ def _get_or_derive_front_face(inputs, body):
         return face
     _ensure_front_face_from_attributes(inputs, body)
     return _selected_or_restored_front_face(inputs, body)
+
+
+def _restore_body_selection_from_memory(inputs):
+    if not _body_token:
+        return None
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+    if not design:
+        return None
+    try:
+        entities = design.findEntityByToken(_body_token)
+    except Exception:
+        return None
+    if not entities:
+        return None
+    for entity in entities:
+        candidate = adsk.fusion.BRepBody.cast(entity)
+        if not candidate:
+            continue
+        native = adsk.fusion.BRepBody.cast(getattr(candidate, "nativeObject", None))
+        body = native if native else candidate
+        _set_body_selection(inputs, candidate)
+        _remember_body_selection(body)
+        return body
+    return None
 
 
 def _restore_front_face_from_memory(inputs, body):
@@ -1696,18 +1783,15 @@ def _apply_material_appearance_or_raise(body, material_id):
 
 def _read_selected_body(inputs):
     try:
-        sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_BODY))
-        if not sel or sel.selectionCount < 1:
-            return None
-        entity = sel.selection(0).entity
-        body = adsk.fusion.BRepBody.cast(entity)
+        body_entity = _selection_entity_by_input_id(inputs, _INPUT_BODY)
+        body = adsk.fusion.BRepBody.cast(body_entity)
         if not body:
-            return None
+            return _restore_body_selection_from_memory(inputs)
 
         native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
-        if native:
-            return native
-        return body
+        resolved = native if native else body
+        _remember_body_selection(resolved)
+        return resolved
     except Exception as exc:
         print(f"Properties: Körperauswahl konnte nicht gelesen werden: {exc}")
     return None
