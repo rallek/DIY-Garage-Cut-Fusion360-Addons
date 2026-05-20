@@ -31,6 +31,8 @@ ATTR_KEY_EDGE_FRONT = "edge_front"
 ATTR_KEY_EDGE_BACK = "edge_back"
 ATTR_KEY_EDGE_LEFT = "edge_left"
 ATTR_KEY_EDGE_RIGHT = "edge_right"
+ATTR_KEY_SURFACE_TOP_TEXT = "surface_top_text"
+ATTR_KEY_SURFACE_BOTTOM_TEXT = "surface_bottom_text"
 _TYPE_FIELD_TRIM_ALLOWANCE = "sheet_default_trim_allowance"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
@@ -52,6 +54,10 @@ _INPUT_EDGE_LEFT_ENABLED = "diygc_edge_left_enabled"
 _INPUT_EDGE_LEFT = "diygc_edge_left"
 _INPUT_EDGE_RIGHT_ENABLED = "diygc_edge_right_enabled"
 _INPUT_EDGE_RIGHT = "diygc_edge_right"
+_INPUT_TOP_FACE = "diygc_top_face"
+_INPUT_TOP_TEXT = "diygc_top_text"
+_INPUT_BOTTOM_FACE = "diygc_bottom_face"
+_INPUT_BOTTOM_TEXT = "diygc_bottom_text"
 
 _handlers = []
 _active_panel_id = None
@@ -85,7 +91,7 @@ _STRINGS = {
         "grain_length": "Längs",
         "grain_width": "Quer",
         "front_face": "Vorderkante (Fläche)",
-        "edges_section": "Bekantung",
+        "edges_section": "Bekantung und Oberflächen",
         "edge_none": "(Keine Kante)",
         "edge_front_enabled": "Vorne bekanten",
         "edge_front": "Kante vorne",
@@ -95,6 +101,10 @@ _STRINGS = {
         "edge_left": "Kante links",
         "edge_right_enabled": "Rechts bekanten",
         "edge_right": "Kante rechts",
+        "top_face": "Fläche oben",
+        "top_text": "Oberfläche oben",
+        "bottom_face": "Fläche unten",
+        "bottom_text": "Oberfläche unten",
         "face_prompt": "Planare Seitenfläche wählen",
     },
     "en": {
@@ -112,7 +122,7 @@ _STRINGS = {
         "grain_length": "Length",
         "grain_width": "Width",
         "front_face": "Front edge (face)",
-        "edges_section": "Edge banding",
+        "edges_section": "Edge banding and surfaces",
         "edge_none": "(No edge)",
         "edge_front_enabled": "Band front",
         "edge_front": "Front edge",
@@ -122,6 +132,10 @@ _STRINGS = {
         "edge_left": "Left edge",
         "edge_right_enabled": "Band right",
         "edge_right": "Right edge",
+        "top_face": "Top face",
+        "top_text": "Top surface",
+        "bottom_face": "Bottom face",
+        "bottom_text": "Bottom surface",
         "face_prompt": "Select planar side face",
     },
 }
@@ -235,6 +249,14 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         edge_right = inputs.addDropDownCommandInput(
             _INPUT_EDGE_RIGHT, _t("edge_right"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        top_face = inputs.addSelectionInput(_INPUT_TOP_FACE, _t("top_face"), _t("face_prompt"))
+        top_face.addSelectionFilter("PlanarFaces")
+        top_face.setSelectionLimits(0, 1)
+        top_text = inputs.addStringValueInput(_INPUT_TOP_TEXT, _t("top_text"), "")
+        bottom_face = inputs.addSelectionInput(_INPUT_BOTTOM_FACE, _t("bottom_face"), _t("face_prompt"))
+        bottom_face.addSelectionFilter("PlanarFaces")
+        bottom_face.setSelectionLimits(0, 1)
+        bottom_text = inputs.addStringValueInput(_INPUT_BOTTOM_TEXT, _t("bottom_text"), "")
         _populate_edge_dropdown(edge_front, None)
         _populate_edge_dropdown(edge_back, None)
         _populate_edge_dropdown(edge_left, None)
@@ -308,6 +330,12 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 _apply_edge_appearance_preview(inputs)
                 return
 
+            if changed.id in (_INPUT_TOP_FACE, _INPUT_BOTTOM_FACE):
+                body = _read_selected_body(inputs)
+                if body:
+                    _validate_surface_face_selection(inputs, body, changed.id)
+                return
+
             if changed.id in (
                 _INPUT_EDGE_FRONT_ENABLED,
                 _INPUT_EDGE_BACK_ENABLED,
@@ -368,6 +396,19 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
                 _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
             else:
                 _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
+
+            _validate_surface_face_selection(inputs, body, _INPUT_TOP_FACE)
+            _validate_surface_face_selection(inputs, body, _INPUT_BOTTOM_FACE)
+            top_text = _read_string_input(inputs, _INPUT_TOP_TEXT, "").strip()
+            bottom_text = _read_string_input(inputs, _INPUT_BOTTOM_TEXT, "").strip()
+            if top_text:
+                _write_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_TEXT, top_text)
+            else:
+                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_TEXT)
+            if bottom_text:
+                _write_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, bottom_text)
+            else:
+                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_TEXT)
 
             side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
             if not side_faces:
@@ -541,6 +582,10 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_grain_direction_dropdown(inputs, "none")
         _update_grain_direction_visibility(inputs, None)
         _set_front_face_selection(inputs, None)
+        _set_top_face_selection(inputs, None)
+        _set_bottom_face_selection(inputs, None)
+        _set_input_value(inputs, _INPUT_TOP_TEXT, "")
+        _set_input_value(inputs, _INPUT_BOTTOM_TEXT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, "")
@@ -559,6 +604,10 @@ def _refresh_inputs_from_selected_body(inputs):
     if front_face and not _face_belongs_to_body(front_face, body):
         _set_front_face_selection(inputs, None)
         _clear_front_face_memory()
+    if _selected_top_face(inputs) and not _face_belongs_to_body(_selected_top_face(inputs), body):
+        _set_top_face_selection(inputs, None)
+    if _selected_bottom_face(inputs) and not _face_belongs_to_body(_selected_bottom_face(inputs), body):
+        _set_bottom_face_selection(inputs, None)
 
     _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
     material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
@@ -589,6 +638,8 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_grain_direction_dropdown(inputs, "none")
 
     _ensure_front_face_from_attributes(inputs, body)
+    _set_input_value(inputs, _INPUT_TOP_TEXT, str(_get_attr(body, ATTR_KEY_SURFACE_TOP_TEXT, "") or "").strip())
+    _set_input_value(inputs, _INPUT_BOTTOM_TEXT, str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, "") or "").strip())
     _sync_edge_controls_from_body_attributes(inputs, body)
     _set_edge_dropdown_enabled_state(inputs)
     _set_edge_controls_visible(inputs, bool(_selected_or_restored_front_face(inputs, body)))
@@ -648,6 +699,10 @@ def _set_edge_controls_visible(inputs, visible):
         _INPUT_EDGE_LEFT,
         _INPUT_EDGE_RIGHT_ENABLED,
         _INPUT_EDGE_RIGHT,
+        _INPUT_TOP_FACE,
+        _INPUT_TOP_TEXT,
+        _INPUT_BOTTOM_FACE,
+        _INPUT_BOTTOM_TEXT,
     )
     for input_id in edge_ids:
         item = inputs.itemById(input_id)
@@ -668,8 +723,8 @@ def _front_face_selection_input(inputs):
     return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_FRONT_FACE))
 
 
-def _selected_front_face(inputs):
-    sel = _front_face_selection_input(inputs)
+def _selection_face_by_input_id(inputs, input_id):
+    sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
     if not sel or sel.selectionCount < 1:
         return None
     face = adsk.fusion.BRepFace.cast(sel.selection(0).entity)
@@ -679,8 +734,8 @@ def _selected_front_face(inputs):
     return native if native else face
 
 
-def _set_front_face_selection(inputs, face):
-    sel = _front_face_selection_input(inputs)
+def _set_selection_face_by_input_id(inputs, input_id, face):
+    sel = adsk.core.SelectionCommandInput.cast(inputs.itemById(input_id))
     if not sel:
         return
     try:
@@ -692,7 +747,31 @@ def _set_front_face_selection(inputs, face):
     try:
         sel.addSelection(face)
     except Exception as exc:
-        print(f"Properties: Vorderkantenfläche konnte nicht gesetzt werden: {exc}")
+        print(f"Properties: Fläche konnte nicht gesetzt werden ({input_id}): {exc}")
+
+
+def _selected_front_face(inputs):
+    return _selection_face_by_input_id(inputs, _INPUT_FRONT_FACE)
+
+
+def _set_front_face_selection(inputs, face):
+    _set_selection_face_by_input_id(inputs, _INPUT_FRONT_FACE, face)
+
+
+def _selected_top_face(inputs):
+    return _selection_face_by_input_id(inputs, _INPUT_TOP_FACE)
+
+
+def _selected_bottom_face(inputs):
+    return _selection_face_by_input_id(inputs, _INPUT_BOTTOM_FACE)
+
+
+def _set_top_face_selection(inputs, face):
+    _set_selection_face_by_input_id(inputs, _INPUT_TOP_FACE, face)
+
+
+def _set_bottom_face_selection(inputs, face):
+    _set_selection_face_by_input_id(inputs, _INPUT_BOTTOM_FACE, face)
 
 
 def _clear_front_face_memory():
@@ -904,6 +983,17 @@ def _validate_front_face_selection(inputs, body):
         raise RuntimeError("Gewählte Vorderkantenfläche gehört nicht zum ausgewählten Body.")
     _remember_front_face_selection(body, front_face)
     _set_edge_controls_visible(inputs, True)
+
+
+def _validate_surface_face_selection(inputs, body, input_id):
+    face = _selection_face_by_input_id(inputs, input_id)
+    if not face:
+        return
+    if _face_belongs_to_body(face, body):
+        return
+    _set_selection_face_by_input_id(inputs, input_id, None)
+    label = _t("top_face") if input_id == _INPUT_TOP_FACE else _t("bottom_face")
+    raise RuntimeError(f"Gewählte Fläche für '{label}' gehört nicht zum ausgewählten Body.")
 
 
 def _face_belongs_to_body(face, body):

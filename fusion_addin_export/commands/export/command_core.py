@@ -16,6 +16,8 @@ _ATTR_KEY_EDGE_FRONT = "edge_front"
 _ATTR_KEY_EDGE_BACK = "edge_back"
 _ATTR_KEY_EDGE_LEFT = "edge_left"
 _ATTR_KEY_EDGE_RIGHT = "edge_right"
+_ATTR_KEY_SURFACE_TOP_TEXT = "surface_top_text"
+_ATTR_KEY_SURFACE_BOTTOM_TEXT = "surface_bottom_text"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 _TYPE_FIELD_EDGE_THICKNESS = "edge_thickness"
@@ -188,6 +190,8 @@ def _body_to_csv_row(body, catalog):
     edge_back = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_BACK)
     edge_left = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_LEFT)
     edge_right = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_RIGHT)
+    surface_top_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_TOP_TEXT)
+    surface_bottom_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_BOTTOM_TEXT)
     return [
         name,
         length,
@@ -198,18 +202,16 @@ def _body_to_csv_row(body, catalog):
         grain_direction,
         material_name,
         export_material_name,
-        edge_front[0],
         edge_front[1],
         edge_front[2],
-        edge_back[0],
         edge_back[1],
         edge_back[2],
-        edge_left[0],
         edge_left[1],
         edge_left[2],
-        edge_right[0],
         edge_right[1],
         edge_right[2],
+        surface_top_text,
+        surface_bottom_text,
     ]
 
 
@@ -455,6 +457,17 @@ def _resolve_edge_export_for_side(body, catalog, attr_key):
     )
 
 
+def _resolve_surface_text_for_export(body, attr_key):
+    attrs = _collect_body_attributes(body)
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != attr_key:
+            continue
+        return str(value or "").strip()
+    return ""
+
+
 def _extract_edge_thickness(catalog_item):
     raw = (catalog_item.properties or {}).get(_TYPE_FIELD_EDGE_THICKNESS)
     if raw in (None, ""):
@@ -533,18 +546,16 @@ def _write_csv(path, rows):
         "grain_direction",
         "material",
         "material_name",
-        "edge_front_id",
         "edge_front_name",
         "edge_front_thickness_mm",
-        "edge_back_id",
         "edge_back_name",
         "edge_back_thickness_mm",
-        "edge_left_id",
         "edge_left_name",
         "edge_left_thickness_mm",
-        "edge_right_id",
         "edge_right_name",
         "edge_right_thickness_mm",
+        "surface_top_text",
+        "surface_bottom_text",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())
@@ -693,8 +704,8 @@ def _get_csv_material_name_mode():
 def _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode):
     # Numeric export columns by contract:
     # 1=length_mm, 2=width_mm, 3=thickness_mm, 5=trim_allowance_mm
-    # 11/14/17/20=edge_*_thickness_mm
-    numeric_indices = {1, 2, 3, 5, 11, 14, 17, 20}
+    # 10/12/14/16=edge_*_thickness_mm
+    numeric_indices = {1, 2, 3, 5, 10, 12, 14, 16}
     out = list(row)
     for idx in numeric_indices:
         if idx >= len(out):
