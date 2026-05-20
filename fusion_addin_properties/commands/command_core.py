@@ -1180,8 +1180,6 @@ def _read_edge_values_for_mode(inputs, require_material=False):
         }
     if mode == "all":
         edge_id = _read_edge_dropdown_value(inputs, _INPUT_EDGE_ALL)
-        if require_material and not edge_id:
-            raise RuntimeError("Für Modus 'Alle gemeinsam' muss ein Kantenmaterial gewählt werden.")
         return {
             ATTR_KEY_EDGE_FRONT: edge_id,
             ATTR_KEY_EDGE_BACK: edge_id,
