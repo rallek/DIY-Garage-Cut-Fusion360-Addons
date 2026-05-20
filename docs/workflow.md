@@ -25,10 +25,8 @@ Im Catalog-Addin:
 # Kanten
 
 Festlegen:
-- long_side oder short_side
-
-Optional:
-- Richtung tauschen
+- Vorderkante als konkrete Seitenfläche
+  (`long_pos`, `long_neg`, `short_pos`, `short_neg`)
 
 Dann:
 - vorne

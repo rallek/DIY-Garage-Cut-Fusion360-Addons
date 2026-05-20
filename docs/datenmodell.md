@@ -107,12 +107,14 @@ exclude_from_export
 Werte:
 
 ```text
-long_side
-short_side
+long_pos
+long_neg
+short_pos
+short_neg
 ```
 
-`Richtung tauschen` ist nur UI-Logik.
-Kein zusätzliches CSV-Feld.
+Legacy-Werte `long_side` / `short_side` können in älteren Datensätzen vorkommen
+und werden beim Laden weiterhin unterstützt.
 
 ---
 

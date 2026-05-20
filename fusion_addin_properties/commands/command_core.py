@@ -1211,16 +1211,28 @@ def _ensure_front_face_from_attributes(inputs, body):
     if _selected_or_restored_front_face(inputs, body):
         return
     front_reference = str(_get_attr(body, ATTR_KEY_FRONT_REFERENCE, "") or "").strip().lower()
-    if front_reference not in ("long_side", "short_side"):
+    key = _canonical_front_key_from_reference(front_reference)
+    if not key:
         return
     if not _has_any_edge_attribute(body):
         return
     canonical_faces = _detect_canonical_side_faces(body)
-    key = "long_pos" if front_reference == "long_side" else "short_pos"
     face = canonical_faces.get(key)
     _set_front_face_selection(inputs, face)
     if face:
         _remember_front_face_selection(body, face)
+
+
+def _canonical_front_key_from_reference(front_reference):
+    value = str(front_reference or "").strip().lower()
+    if value in ("long_pos", "long_neg", "short_pos", "short_neg"):
+        return value
+    # Legacy fallback for already persisted data.
+    if value == "long_side":
+        return "long_pos"
+    if value == "short_side":
+        return "short_pos"
+    return ""
 
 
 def _has_any_edge_attribute(body):
@@ -1393,9 +1405,6 @@ def _resolve_side_faces_from_front_selection(inputs, body):
     if back_key in canonical_faces:
         side_faces["back"] = canonical_faces[back_key]
 
-    front_axis_idx, _front_sign = _canonical_key_axis_and_sign(front_key, axis_info)
-    front_reference = "long_side" if front_axis_idx == axis_info["long_idx"] else "short_side"
-
     remaining = [key for key in canonical_faces.keys() if key not in (front_key, back_key)]
     if len(remaining) >= 2:
         front_vec = _axis_vector(*_canonical_key_axis_and_sign(front_key, axis_info))
@@ -1413,7 +1422,7 @@ def _resolve_side_faces_from_front_selection(inputs, body):
             scored.sort(key=lambda item: item[0])
             side_faces["left"] = scored[0][1]
             side_faces["right"] = scored[-1][1]
-    return side_faces, front_reference
+    return side_faces, front_key
 
 
 def _detect_canonical_side_faces(body):
