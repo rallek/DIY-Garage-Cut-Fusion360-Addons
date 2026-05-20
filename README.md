@@ -214,7 +214,8 @@ Hinweise:
 
 - Umgebungsvariablen wie `%LOCALAPPDATA%` werden automatisch aufgeloest.
 - Der Pfad ist pro Benutzer/Installation unterschiedlich und deshalb konfigurierbar.
-- Beim Speichern eines Catalog-Eintrags versucht das Add-in, Texture-Pfade automatisch aus der gewaehlten Fusion-Appearance mitzunehmen (`preview_texture`, `appearance_texture_color`, usw.).
+- Beim Speichern eines Catalog-Eintrags speichert das Add-in Texture-Referenzen portabel als Dateiname (`preview_texture`, `appearance_texture_color`, usw.), nicht als benutzerlokalen Absolutpfad.
+- Die Aufloesung auf konkrete lokale Dateien erfolgt zur Laufzeit ueber `material_texture_roots`.
 
 ## Catalog-Typkonfiguration (Issue #22)
 

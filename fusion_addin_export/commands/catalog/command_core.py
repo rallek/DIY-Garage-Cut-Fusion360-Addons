@@ -55,6 +55,13 @@ _preview_config_path = os.path.abspath(
 )
 _preview_config_cache = None
 _texture_file_index_cache = {}
+_APPEARANCE_META_PREFIX = "appearance_texture_"
+_APPEARANCE_META_KEYS = {
+    "appearance_resolved_name",
+    "appearance_id",
+    "appearance_has_texture",
+    "preview_texture",
+}
 
 _ui_lang = "de"
 _selection_id_by_label = {}
@@ -341,6 +348,7 @@ def _save_from_inputs(inputs):
         item_id = existing_item.id
         base_properties = dict(existing_item.properties or {})
 
+    _remove_appearance_metadata(base_properties)
     for known_key in get_all_type_field_keys():
         base_properties.pop(known_key, None)
     for legacy_key in get_all_type_field_alias_keys():
@@ -1288,11 +1296,28 @@ def _build_appearance_metadata(appearance_name, appearance_obj):
 
     texture_maps = _collect_texture_maps_for_appearance(appearance_obj) if appearance_obj else {}
     for key, value in texture_maps.items():
-        if value:
-            data[f"appearance_texture_{key}"] = value
+        filename = _texture_ref_filename(value)
+        if filename:
+            data[f"appearance_texture_{key}"] = filename
     if texture_maps.get("preview"):
-        data["preview_texture"] = texture_maps["preview"]
+        preview_name = _texture_ref_filename(texture_maps.get("preview"))
+        if preview_name:
+            data["preview_texture"] = preview_name
     return data
+
+
+def _remove_appearance_metadata(properties):
+    keys = list((properties or {}).keys())
+    for key in keys:
+        if key in _APPEARANCE_META_KEYS or str(key).startswith(_APPEARANCE_META_PREFIX):
+            properties.pop(key, None)
+
+
+def _texture_ref_filename(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return os.path.basename(raw.replace("/", "\\")).strip()
 
 
 def _load_preview_config():

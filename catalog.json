@@ -9,9 +9,9 @@
       "appearance_resolved_name": "Bambus hell - Halbglanz",
       "appearance_id": "Prism-322",
       "appearance_has_texture": true,
-      "appearance_texture_other": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_bamboo_light_color.jpg",
-      "appearance_texture_preview": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_bamboo_light_color.jpg",
-      "preview_texture": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_bamboo_light_color.jpg",
+      "appearance_texture_other": "wood_bamboo_light_color.jpg",
+      "appearance_texture_preview": "wood_bamboo_light_color.jpg",
+      "preview_texture": "wood_bamboo_light_color.jpg",
       "sheet_default_trim_allowance": 0.0,
       "sheet_has_grain": "none",
       "sheet_default_grain_direction": "none"
@@ -24,10 +24,10 @@
       "appearance_resolved_name": "Kiefer",
       "appearance_id": "Prism-148",
       "appearance_has_texture": true,
-      "appearance_texture_other": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_preview": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_color": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_bump.jpg",
-      "preview_texture": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg"
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg"
     },
     {
       "id": "edge.abs_white_2",
@@ -59,9 +59,9 @@
       "appearance_resolved_name": "MDF",
       "appearance_id": "Hardwood",
       "appearance_has_texture": true,
-      "appearance_texture_color": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\granite_base_refl.jpg",
-      "appearance_texture_preview": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\granite_base_refl.jpg",
-      "preview_texture": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\granite_base_refl.jpg",
+      "appearance_texture_color": "granite_base_refl.jpg",
+      "appearance_texture_preview": "granite_base_refl.jpg",
+      "preview_texture": "granite_base_refl.jpg",
       "sheet_has_grain": "none",
       "sheet_default_grain_direction": "none"
     },
@@ -73,10 +73,10 @@
       "appearance_resolved_name": "Kiefer",
       "appearance_id": "Prism-148",
       "appearance_has_texture": true,
-      "appearance_texture_other": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_preview": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_color": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_bump.jpg",
-      "preview_texture": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg"
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg"
     },
     {
       "id": "sheet.brett",
@@ -86,11 +86,12 @@
       "appearance_resolved_name": "Kiefer",
       "appearance_id": "Prism-148",
       "appearance_has_texture": true,
-      "appearance_texture_other": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_preview": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "appearance_texture_color": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_bump.jpg",
-      "preview_texture": "C:\\Users\\Ralf\\AppData\\Local\\Autodesk\\Common\\Material Library\\5.0.0\\slib\\resource\\1\\Mats\\wood_pine_color.jpg",
-      "sheet_has_grain": "none",
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "yes",
       "sheet_default_grain_direction": "none"
     },
     {

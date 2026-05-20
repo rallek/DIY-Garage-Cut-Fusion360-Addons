@@ -665,18 +665,12 @@ def _parse_trim_allowance(raw_value):
     raw = str(raw_value or "").strip()
     if not raw:
         raise RuntimeError("Fräszulage fehlt.")
-    cleaned = raw.replace(" ", "")
-    if "," in cleaned and "." in cleaned:
-        if cleaned.rfind(",") > cleaned.rfind("."):
-            cleaned = cleaned.replace(".", "").replace(",", ".")
-        else:
-            cleaned = cleaned.replace(",", "")
-    elif "," in cleaned:
-        cleaned = cleaned.replace(",", ".")
-    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", cleaned)
+    # Strict input: complete string must be a number, optional with trailing "mm".
+    # Examples: "0,5", "0.5", "0,5 mm", ".5mm"
+    match = re.fullmatch(r"\s*([+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+))\s*(mm)?\s*", raw, re.IGNORECASE)
     if not match:
-        raise RuntimeError(f"Fräszulage ist keine Zahl: '{raw_value}'")
-    numeric = float(match.group(0))
+        raise RuntimeError(f"Fräszulage hat ein ungültiges Format: '{raw_value}'")
+    numeric = float(match.group(1).replace(",", "."))
     if numeric < 0:
         raise RuntimeError("Fräszulage muss >= 0 sein.")
     return numeric
