@@ -295,6 +295,10 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         cmd.execute.add(on_execute)
         _handlers.append(on_execute)
 
+        on_validate = _ValidateInputsHandler()
+        cmd.validateInputs.add(on_validate)
+        _handlers.append(on_validate)
+
 
 class _InputChangedHandler(adsk.core.InputChangedEventHandler):
     def notify(self, args):
@@ -468,6 +472,22 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
         except Exception as exc:
             print(f"Properties: Execute-Fehler: {exc}")
             ui.messageBox(f"Eigenschaften fehlgeschlagen:\n{exc}")
+
+
+class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
+    def notify(self, args):
+        event_args = adsk.core.ValidateInputsEventArgs.cast(args)
+        if not event_args:
+            return
+        try:
+            inputs = event_args.inputs
+            body = _read_selected_body(inputs) if inputs else None
+            material_id = _read_material_dropdown_value(inputs, raise_on_unknown=False) if inputs else ""
+            event_args.areInputsValid = bool(body and material_id)
+        except Exception as exc:
+            print(f"Properties: ValidateInputs-Fehler: {exc}")
+            # Kein Hard-Block durch temporäre UI-State-Inkonsistenz.
+            event_args.areInputsValid = True
 
 
 def _load_material_entries():
@@ -810,6 +830,14 @@ def _selected_or_restored_front_face(inputs, body):
     return _restore_front_face_from_memory(inputs, body)
 
 
+def _get_or_derive_front_face(inputs, body):
+    face = _selected_or_restored_front_face(inputs, body)
+    if face:
+        return face
+    _ensure_front_face_from_attributes(inputs, body)
+    return _selected_or_restored_front_face(inputs, body)
+
+
 def _restore_front_face_from_memory(inputs, body):
     if not body:
         return None
@@ -936,7 +964,7 @@ def _set_edge_dropdown_enabled_state(inputs):
     section_visible = bool(header and header.isVisible)
     edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
     body = _read_selected_body(inputs)
-    has_front_face = bool(body and _selected_or_restored_front_face(inputs, body))
+    has_front_face = bool(body and _get_or_derive_front_face(inputs, body))
 
     edge_all = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_EDGE_ALL))
     if edge_all:
@@ -1260,7 +1288,7 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
 
 
 def _resolve_side_faces_from_front_selection(inputs, body):
-    front_face = _selected_or_restored_front_face(inputs, body)
+    front_face = _get_or_derive_front_face(inputs, body)
     if not front_face:
         return {}, ""
     if not _face_belongs_to_body(front_face, body):
