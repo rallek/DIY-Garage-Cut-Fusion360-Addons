@@ -23,6 +23,38 @@
           "quantity": "length",
           "storage_unit": "mm",
           "legacy_keys": ["default_trim_allowance_mm"]
+        },
+        {
+          "key": "sheet_has_grain",
+          "kind": "enum",
+          "labels": {
+            "de": "Maserung vorhanden",
+            "en": "Has grain"
+          },
+          "options": ["none", "yes", "no"],
+          "option_labels": {
+            "none": { "de": "Keine", "en": "None" },
+            "yes": { "de": "Ja", "en": "Yes" },
+            "no": { "de": "Nein", "en": "No" }
+          },
+          "default": "none",
+          "csv": false
+        },
+        {
+          "key": "sheet_default_grain_direction",
+          "kind": "enum",
+          "labels": {
+            "de": "Standard-Maserungsrichtung",
+            "en": "Default grain direction"
+          },
+          "options": ["none", "length", "width"],
+          "option_labels": {
+            "none": { "de": "Keine", "en": "None" },
+            "length": { "de": "Längs", "en": "Length" },
+            "width": { "de": "Quer", "en": "Width" }
+          },
+          "default": "none",
+          "csv": false
         }
       ]
     },

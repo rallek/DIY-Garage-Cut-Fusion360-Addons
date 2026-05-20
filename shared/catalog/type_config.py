@@ -24,7 +24,33 @@ _DEFAULT_TYPE_CONFIG = {
                     "quantity": "length",
                     "storage_unit": "mm",
                     "legacy_keys": ["default_trim_allowance_mm"],
-                }
+                },
+                {
+                    "key": "sheet_has_grain",
+                    "kind": "enum",
+                    "labels": {"de": "Maserung vorhanden", "en": "Has grain"},
+                    "options": ["none", "yes", "no"],
+                    "option_labels": {
+                        "none": {"de": "Keine", "en": "None"},
+                        "yes": {"de": "Ja", "en": "Yes"},
+                        "no": {"de": "Nein", "en": "No"},
+                    },
+                    "default": "none",
+                    "csv": False,
+                },
+                {
+                    "key": "sheet_default_grain_direction",
+                    "kind": "enum",
+                    "labels": {"de": "Standard-Maserungsrichtung", "en": "Default grain direction"},
+                    "options": ["none", "length", "width"],
+                    "option_labels": {
+                        "none": {"de": "Keine", "en": "None"},
+                        "length": {"de": "Längs", "en": "Length"},
+                        "width": {"de": "Quer", "en": "Width"},
+                    },
+                    "default": "none",
+                    "csv": False,
+                },
             ],
         },
         {
@@ -167,10 +193,25 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 options.append(text)
     if not options:
         options = ["value"]
+    option_labels_raw = raw.get("option_labels")
+    option_labels: Dict[str, Dict[str, str]] = {}
+    if isinstance(option_labels_raw, dict):
+        for option in options:
+            label_entry = option_labels_raw.get(option)
+            if isinstance(label_entry, dict):
+                option_labels[option] = {
+                    "de": str(label_entry.get("de", option)),
+                    "en": str(label_entry.get("en", option)),
+                }
+            else:
+                option_labels[option] = {"de": option, "en": option}
+    else:
+        for option in options:
+            option_labels[option] = {"de": option, "en": option}
     default = str(raw.get("default", options[0]))
     if default not in options:
         default = options[0]
-    result.update({"options": options, "default": default})
+    result.update({"options": options, "option_labels": option_labels, "default": default})
     return result
 
 

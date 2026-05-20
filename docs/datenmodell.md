@@ -123,12 +123,50 @@ Nie führende Datenquelle.
 
 # CSV-Bezug
 
-CSV-Header bleibt unverändert.
+Entscheidung (2026-05-19):
+- Keine Sammelspalte `attributes` im Zielvertrag.
+- Relevante Felder werden als eigene CSV-Spalten geführt.
+- `attributes` war nur Übergang/Debug und ist nicht Teil des stabilen Datenvertrags.
 
-Typspezifische Felder aus dem Katalog werden in der Spalte `attributes` ergänzt, z. B.:
+CSV-Header ist damit explizit fachlich aufgebaut (z. B. Maße, Material, Fräszulage, Kanten, Hinweise), statt Key/Value-Textsammlung.
+
+Katalog-/Typ-Informationen bleiben intern strukturierte Quelle (`catalog.json` + `catalog_type_config.json`) und werden bei Bedarf gezielt in eigene Spalten projiziert.
+
+## Exportformat (konfigurierbar)
+
+Datei:
 
 ```text
-DIYGarageCut.catalog:item_id=sheet.mdf
-DIYGarageCut.catalog:sheet_default_trim_allowance=0.5
-DIYGarageCut.catalog:sheet_default_trim_allowance_unit=mm
+export_config.json
 ```
+
+Schlüssel:
+
+- `csv_delimiter`: Feldtrennzeichen.
+- `csv_decimal_separator`: Dezimaltrennzeichen (`.` oder `,`).
+- `csv_decimals`: Anzahl Nachkommastellen für numerische CSV-Spalten.
+- `csv_decimal_mode`:
+- `fixed`: immer feste Nachkommastellen.
+- `trim`: Nachkommastellen nur bei Bedarf.
+- `csv_material_name_mode`:
+- `material`: `material_name` entspricht `material`.
+- `typed_dimensions`: materialbezogene Bezeichnung je Typ.
+- Regel `bar`: `material` + Leerzeichen + `thickness_mm` + `x` + `width_mm`.
+- Regel `sheet`: `material` + Leerzeichen + `thickness_mm`.
+
+Numerische CSV-Spalten:
+
+```text
+length_mm
+width_mm
+thickness_mm
+trim_allowance_mm
+```
+
+Zusätzliche Spalte:
+
+```text
+material_name
+```
+
+`material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.

@@ -1,17 +1,29 @@
 import adsk.core
 import adsk.fusion
 import csv
+import json
+import locale
+import os
 import re
 
 import export_config as config
-from shared.catalog import get_csv_fields, load_catalog
+from shared.catalog import get_type_fields, get_type_label, load_catalog
 
 _ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
+_ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
+_ATTR_KEY_GRAIN_DIRECTION = "grain_direction"
+_TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
+_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 
 _handlers = []
 _active_panel_id = None
 _is_started = False
 _command_created_handler = None
+_ui_lang = "de"
+_export_settings_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "export_config.json")
+)
+_export_settings_cache = None
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -39,6 +51,9 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
 
 
 def _run_export_mode(app, ui):
+    global _ui_lang
+    _ui_lang = _detect_ui_lang()
+
     export_path = _pick_export_path(app, ui)
     if not export_path:
         ui.messageBox("CSV-Export abgebrochen. Es wurde keine Datei geschrieben.")
@@ -111,6 +126,8 @@ def _append_component_bodies(component, rows, seen_tokens, catalog):
         for body in component.bRepBodies:
             _append_body_row_if_visible(body, rows, seen_tokens, catalog)
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
         raise RuntimeError(f"CSV-Export: Component-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
@@ -124,8 +141,12 @@ def _append_occurrence_bodies_recursive(occurrences, rows, seen_tokens, catalog)
                     _append_body_row_if_visible(body, rows, seen_tokens, catalog)
                 _append_occurrence_bodies_recursive(occ.childOccurrences, rows, seen_tokens, catalog)
             except Exception as exc:
+                if isinstance(exc, RuntimeError):
+                    raise
                 raise RuntimeError(f"CSV-Export: Occurrence konnte nicht gelesen werden: {exc}") from exc
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
         raise RuntimeError(f"CSV-Export: Occurrence-Liste konnte nicht gelesen werden: {exc}") from exc
 
 
@@ -141,18 +162,34 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
         seen_tokens.add(token)
         rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
+        if isinstance(exc, RuntimeError):
+            raise
+        if isinstance(exc, ValueError):
+            raise RuntimeError(str(exc)) from exc
         body_name = _safe_body_name(body)
         raise RuntimeError(f"CSV-Export: Body '{body_name}' konnte nicht exportiert werden: {exc}") from exc
 
 
 def _body_to_csv_row(body, catalog):
     name = _safe_body_name(body)
-    width, height, depth = _get_dimensions_from_bounding_box(body)
-    material_id, material_type = _resolve_catalog_material_ref(body, catalog)
-    material_name = _safe_name(getattr(body, "material", None))
-    appearance_name = _safe_name(getattr(body, "appearance", None))
-    attr_text = _collect_attributes_as_text(body, catalog)
-    return [name, width, height, depth, material_id, material_type, material_name, appearance_name, attr_text]
+    catalog_item = _resolve_catalog_material_ref(body, catalog)
+    length, width, thickness = _get_dimensions_for_export(body, catalog_item.type)
+    material_type = _type_label(catalog_item.type)
+    trim_allowance_mm = _resolve_trim_allowance_for_export(body, catalog_item.type)
+    grain_direction = _resolve_grain_direction_for_export(body, catalog_item)
+    material_name = str(catalog_item.name or "").strip() or "-"
+    export_material_name = _build_export_material_name(catalog_item, thickness, width, material_name)
+    return [
+        name,
+        length,
+        width,
+        thickness,
+        material_type,
+        trim_allowance_mm,
+        grain_direction,
+        material_name,
+        export_material_name,
+    ]
 
 
 def _safe_body_name(body):
@@ -164,24 +201,34 @@ def _safe_body_name(body):
     return "-"
 
 
-def _get_dimensions_from_bounding_box(body):
+def _get_dimensions_for_export(body, material_type):
     try:
         bbox = body.boundingBox
         min_p = bbox.minPoint
         max_p = bbox.maxPoint
-        # Fusion-BoundingBox ist typischerweise in cm, Export soll in mm sein.
-        width = abs(max_p.x - min_p.x) * 10.0
-        height = abs(max_p.y - min_p.y) * 10.0
-        depth = abs(max_p.z - min_p.z) * 10.0
-        return _fmt_num(width), _fmt_num(height), _fmt_num(depth)
+        dims_mm = sorted(
+            [
+                abs(max_p.x - min_p.x) * 10.0,
+                abs(max_p.y - min_p.y) * 10.0,
+                abs(max_p.z - min_p.z) * 10.0,
+            ]
+        )
+        # Index 0 = thickness (smallest), 1 = width (middle), 2 = length (largest)
+        thickness = dims_mm[0]
+        width = dims_mm[1]
+        length = dims_mm[2]
+        if str(material_type or "").strip() == "bar":
+            return _fmt_mm(length), _fmt_mm(width), _fmt_mm(thickness)
+        return _fmt_mm(length), _fmt_mm(width), _fmt_mm(thickness)
     except Exception as exc:
         print(f"CSV-Export: BoundingBox-Fehler bei Body: {exc}")
         return "-", "-", "-"
 
 
-def _fmt_num(value):
+def _fmt_mm(value):
     try:
-        return f"{float(value):.6f}"
+        numeric = float(value)
+        return _format_numeric_for_export(numeric)
     except Exception:
         return "-"
 
@@ -195,68 +242,62 @@ def _safe_name(obj):
     return "-"
 
 
-def _collect_attributes_as_text(body, catalog):
-    entries = []
-    try:
-        attrs = _collect_body_attributes(body)
-        for group, name, value in attrs:
-            entries.append(f"{group}:{name}={value}")
-        entries.extend(_collect_catalog_csv_entries(attrs, catalog))
-    except Exception as exc:
-        raise RuntimeError(f"CSV-Export: Attribute konnten nicht gelesen werden: {exc}") from exc
-    return ";".join(entries) if entries else "-"
-
-
 def _collect_body_attributes(body):
     out = []
-    attributes = getattr(body, "attributes", None)
-    if attributes is not None and attributes.count > 0:
-        for i in range(attributes.count):
-            attr = attributes.item(i)
-            if not attr:
+    seen = set()
+
+    targets = [body]
+    native = _try_get_native_object(body)
+    if native is not None and native is not body:
+        targets.append(native)
+
+    for target in targets:
+        _append_attribute_rows(target, out, seen)
+
+    tokens = []
+    body_token = _get_entity_token(body)
+    if body_token:
+        tokens.append(body_token)
+    native_token = _get_entity_token(native) if native is not None else None
+    if native_token and native_token not in tokens:
+        tokens.append(native_token)
+    for token in tokens:
+        for row in _collect_design_fallback_attributes(token):
+            marker = (row[0], row[1], row[2])
+            if marker in seen:
                 continue
-            out.append(
-                (
-                    attr.groupName if attr.groupName else "-",
-                    attr.name if attr.name else "-",
-                    attr.value if attr.value is not None else "-",
-                )
-            )
-    token = _get_entity_token(body)
-    if token:
-        out.extend(_collect_design_fallback_attributes(token))
+            seen.add(marker)
+            out.append(row)
     return out
 
 
-def _collect_catalog_csv_entries(attributes, catalog):
-    if not catalog:
-        return []
-    material_id, source = _resolve_catalog_material_id(attributes)
-    if not material_id:
-        return []
-    if source == "material_typ":
-        return []
-    item = catalog.get(material_id)
-    if not item:
-        return []
-    entries = [
-        f"DIYGarageCut.catalog:item_id={item.id}",
-        f"DIYGarageCut.catalog:item_type={item.type}",
-        f"DIYGarageCut.catalog:item_name={item.name}",
-    ]
-    for field in get_csv_fields(item.type):
-        key = field.get("key")
-        if not key:
+def _append_attribute_rows(entity, out, seen):
+    if entity is None:
+        return
+    attributes = getattr(entity, "attributes", None)
+    if attributes is None or attributes.count < 1:
+        return
+    for i in range(attributes.count):
+        attr = attributes.item(i)
+        if not attr:
             continue
-        if key in (item.properties or {}):
-            entries.append(f"DIYGarageCut.catalog:{key}={item.properties.get(key)}")
-            unit = (field.get("storage_unit") or "").strip()
-            if unit:
-                entries.append(f"DIYGarageCut.catalog:{key}_unit={unit}")
-    doc_unit = _get_document_length_unit()
-    if doc_unit:
-        entries.append(f"DIYGarageCut.context:document_length_unit={doc_unit}")
-    return entries
+        group = attr.groupName if attr.groupName else "-"
+        name = attr.name if attr.name else "-"
+        value = attr.value if attr.value is not None else "-"
+        marker = (group, name, value)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(marker)
+
+
+def _try_get_native_object(entity):
+    if entity is None:
+        return None
+    try:
+        return getattr(entity, "nativeObject", None)
+    except Exception:
+        return None
 
 
 def _resolve_catalog_material_ref(body, catalog):
@@ -281,7 +322,7 @@ def _resolve_catalog_material_ref(body, catalog):
             f"Body '{body_name}' referenziert material_id '{material_id}', "
             "die nicht in catalog.json existiert."
         )
-    return item.id, item.type
+    return item
 
 
 def _resolve_catalog_material_id(attributes):
@@ -307,22 +348,130 @@ def _resolve_catalog_material_id(attributes):
     return None, None
 
 
+def _resolve_trim_allowance_for_export(body, material_type):
+    if not _material_type_supports_trim_allowance(material_type):
+        return ""
+    attrs = _collect_body_attributes(body)
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != _ATTR_KEY_TRIM_ALLOWANCE_MM:
+            continue
+        value_text = str(value).strip() if value is not None else ""
+        if value_text in ("", "-"):
+            return ""
+        try:
+            return _fmt_mm(float(value_text.replace(",", ".")))
+        except Exception:
+            return value_text
+    return ""
+
+
+def _material_type_supports_trim_allowance(material_type):
+    type_name = str(material_type or "").strip()
+    if not type_name:
+        return False
+    for field in get_type_fields(type_name):
+        if str(field.get("key", "")).strip() == "sheet_default_trim_allowance":
+            return True
+    return False
+
+
+def _resolve_grain_direction_for_export(body, catalog_item):
+    if not _material_type_supports_grain(catalog_item.type):
+        return "none"
+    has_grain = str((catalog_item.properties or {}).get(_TYPE_FIELD_HAS_GRAIN, "none") or "none").strip().lower()
+    if has_grain != "yes":
+        return "none"
+    attrs = _collect_body_attributes(body)
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != _ATTR_KEY_GRAIN_DIRECTION:
+            continue
+        value_text = str(value).strip().lower() if value is not None else ""
+        if value_text in ("none", "length", "width"):
+            return value_text
+        return "none"
+
+    default_direction = str((catalog_item.properties or {}).get(_TYPE_FIELD_DEFAULT_GRAIN_DIRECTION, "none") or "none").strip().lower()
+    if default_direction in ("none", "length", "width"):
+        return default_direction
+    return "none"
+
+
+def _material_type_supports_grain(material_type):
+    type_name = str(material_type or "").strip()
+    if not type_name:
+        return False
+    keys = {str(field.get("key", "")).strip() for field in get_type_fields(type_name)}
+    return _TYPE_FIELD_HAS_GRAIN in keys and _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION in keys
+
+
+def _build_export_material_name(catalog_item, thickness, width, material_name):
+    mode = _get_csv_material_name_mode()
+    if mode == "material":
+        return material_name
+
+    thickness_label = _compact_dimension_label(thickness)
+    width_label = _compact_dimension_label(width)
+    type_id = str(getattr(catalog_item, "type", "") or "").strip().lower()
+    if type_id == "bar":
+        if _is_export_dim_value(thickness_label) and _is_export_dim_value(width_label):
+            return f"{material_name} {thickness_label}x{width_label}"
+        return material_name
+    if type_id == "sheet":
+        if _is_export_dim_value(thickness_label):
+            return f"{material_name} {thickness_label}"
+        return material_name
+    return material_name
+
+
+def _is_export_dim_value(value):
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text == "-":
+        return False
+    return True
+
+
+def _compact_dimension_label(value):
+    text = str(value or "").strip()
+    if not text or text == "-":
+        return text
+    normalized = text.replace(",", ".")
+    try:
+        numeric = float(normalized)
+    except Exception:
+        return text
+    if abs(numeric - round(numeric)) < 1e-9:
+        return str(int(round(numeric)))
+    return text
+
+
 def _write_csv(path, rows):
     header = [
         "body_name",
+        "length_mm",
         "width_mm",
-        "height_mm",
-        "depth_mm",
-        "material_id",
+        "thickness_mm",
         "material_type",
+        "trim_allowance_mm",
+        "grain_direction",
         "material",
-        "appearance",
-        "attributes",
+        "material_name",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.writer(csv_file)
+        writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())
         writer.writerow(header)
-        writer.writerows(rows)
+        decimal_separator = _get_csv_decimal_separator()
+        decimals = _get_csv_decimals()
+        decimal_mode = _get_csv_decimal_mode()
+        for row in rows:
+            writer.writerow(
+                _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode)
+            )
 
 
 def _get_entity_token(entity):
@@ -376,17 +525,168 @@ def _try_load_catalog():
         raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
 
 
-def _get_document_length_unit():
+def _load_export_settings():
+    global _export_settings_cache
+    if _export_settings_cache is not None:
+        return _export_settings_cache
+
+    settings = {
+        "csv_delimiter": ";",
+        "csv_decimal_separator": ".",
+        "csv_decimals": 1,
+        "csv_decimal_mode": "fixed",
+        "csv_material_name_mode": "material",
+    }
     try:
-        app = adsk.core.Application.get()
-        design = adsk.fusion.Design.cast(app.activeProduct) if app else None
-        units = getattr(design, "unitsManager", None) if design else None
-        if not units:
-            return ""
-        default_units = getattr(units, "defaultLengthUnits", None)
-        return str(default_units or "").strip()
+        if os.path.exists(_export_settings_path):
+            with open(_export_settings_path, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                if "csv_delimiter" in loaded:
+                    settings["csv_delimiter"] = loaded.get("csv_delimiter")
+                if "csv_decimal_separator" in loaded:
+                    settings["csv_decimal_separator"] = loaded.get("csv_decimal_separator")
+                if "csv_decimals" in loaded:
+                    settings["csv_decimals"] = loaded.get("csv_decimals")
+                if "csv_decimal_mode" in loaded:
+                    settings["csv_decimal_mode"] = loaded.get("csv_decimal_mode")
+                if "csv_material_name_mode" in loaded:
+                    settings["csv_material_name_mode"] = loaded.get("csv_material_name_mode")
+    except Exception as exc:
+        print(f"CSV-Export: export_config.json konnte nicht gelesen werden: {exc}")
+
+    _export_settings_cache = settings
+    return settings
+
+
+def _get_csv_delimiter():
+    raw = _load_export_settings().get("csv_delimiter", ";")
+    text = str(raw or "").strip()
+    if text in ("\\t", "tab"):
+        return "\t"
+    if len(text) == 1:
+        return text
+    return ";"
+
+
+def _get_csv_decimal_separator():
+    raw = _load_export_settings().get("csv_decimal_separator", ".")
+    text = str(raw or "").strip()
+    if text in (".", ","):
+        return text
+    return "."
+
+
+def _get_csv_decimals():
+    raw = _load_export_settings().get("csv_decimals", 1)
+    try:
+        value = int(raw)
     except Exception:
-        return ""
+        return 1
+    if value < 0:
+        return 0
+    if value > 6:
+        return 6
+    return value
+
+
+def _get_csv_decimal_mode():
+    raw = _load_export_settings().get("csv_decimal_mode", "fixed")
+    text = str(raw or "").strip().lower()
+    if text in ("fixed", "trim"):
+        return text
+    return "fixed"
+
+
+def _get_csv_material_name_mode():
+    raw = _load_export_settings().get("csv_material_name_mode", "material")
+    text = str(raw or "").strip().lower()
+    if text in ("material", "typed_dimensions"):
+        return text
+    return "material"
+
+
+def _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode):
+    # Numeric export columns by contract:
+    # 1=length_mm, 2=width_mm, 3=thickness_mm, 5=trim_allowance_mm
+    numeric_indices = {1, 2, 3, 5}
+    out = list(row)
+    for idx in numeric_indices:
+        if idx >= len(out):
+            continue
+        out[idx] = _format_csv_numeric_cell(out[idx], decimal_separator, decimals, decimal_mode)
+    return out
+
+
+def _format_csv_numeric_cell(value, decimal_separator, decimals, decimal_mode):
+    text = str(value or "").strip()
+    if not text:
+        return text
+    normalized = text.replace(",", ".")
+    try:
+        numeric = float(normalized)
+    except Exception:
+        return text
+
+    return _format_numeric_for_export(
+        numeric,
+        decimal_separator=decimal_separator,
+        decimals=decimals,
+        decimal_mode=decimal_mode,
+    )
+
+
+def _format_numeric_for_export(numeric, decimal_separator=None, decimals=None, decimal_mode=None):
+    if decimal_separator is None:
+        decimal_separator = _get_csv_decimal_separator()
+    if decimals is None:
+        decimals = _get_csv_decimals()
+    if decimal_mode is None:
+        decimal_mode = _get_csv_decimal_mode()
+
+    if decimal_mode == "fixed":
+        formatted = f"{float(numeric):.{int(decimals)}f}"
+    else:
+        formatted = f"{float(numeric):.{int(decimals)}f}".rstrip("0").rstrip(".")
+        if formatted == "-0":
+            formatted = "0"
+
+    if decimal_separator == ",":
+        return formatted.replace(".", ",")
+    return formatted
+
+
+def _detect_ui_lang():
+    app = adsk.core.Application.get()
+    candidates = []
+    try:
+        prefs = getattr(app, "preferences", None)
+        gp = getattr(prefs, "generalPreferences", None) if prefs else None
+        for attr in ("userLanguage", "language"):
+            val = getattr(gp, attr, None)
+            if val is not None:
+                candidates.append(str(val))
+    except Exception:
+        pass
+
+    try:
+        loc = locale.getdefaultlocale()
+        if loc and loc[0]:
+            candidates.append(loc[0])
+    except Exception:
+        pass
+
+    for candidate in candidates:
+        cand = (candidate or "").lower()
+        if "de" in cand:
+            return "de"
+        if "en" in cand:
+            return "en"
+    return "de"
+
+
+def _type_label(type_id):
+    return get_type_label(type_id, _ui_lang)
 
 
 def _get_or_create_panel(workspace):

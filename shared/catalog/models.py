@@ -47,9 +47,17 @@ class Catalog:
     def build(cls, version: int, items: Iterable[CatalogItem]) -> "Catalog":
         item_list = list(items)
         index: Dict[str, CatalogItem] = {}
+        names_seen: Dict[str, str] = {}
         for item in item_list:
             if item.id in index:
                 raise ValueError(f"Duplicate catalog item id: {item.id}")
+            name_key = str(item.name or "").strip().lower()
+            if name_key in names_seen:
+                raise ValueError(
+                    f"Duplicate catalog item name: '{item.name}' "
+                    f"(already used by id '{names_seen[name_key]}')."
+                )
+            names_seen[name_key] = item.id
             index[item.id] = item
         return cls(version=version, items=item_list, _index=index)
 

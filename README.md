@@ -214,7 +214,8 @@ Hinweise:
 
 - Umgebungsvariablen wie `%LOCALAPPDATA%` werden automatisch aufgeloest.
 - Der Pfad ist pro Benutzer/Installation unterschiedlich und deshalb konfigurierbar.
-- Beim Speichern eines Catalog-Eintrags versucht das Add-in, Texture-Pfade automatisch aus der gewaehlten Fusion-Appearance mitzunehmen (`preview_texture`, `appearance_texture_color`, usw.).
+- Beim Speichern eines Catalog-Eintrags speichert das Add-in Texture-Referenzen portabel als Dateiname (`preview_texture`, `appearance_texture_color`, usw.), nicht als benutzerlokalen Absolutpfad.
+- Die Aufloesung auf konkrete lokale Dateien erfolgt zur Laufzeit ueber `material_texture_roots`.
 
 ## Catalog-Typkonfiguration (Issue #22)
 
@@ -231,3 +232,42 @@ Zweck:
 Hinweis:
 
 - Die CSV-Kopfzeile bleibt unveraendert.
+
+## CSV-Export Konfiguration
+
+Datei:
+
+- `export_config.json`
+
+Aktuell relevante Einstellungen:
+
+- `csv_delimiter`: Feldtrennzeichen (z. B. `;`, `,`, `|`, `tab`)
+- `csv_decimal_separator`: Dezimaltrennzeichen (`.` oder `,`)
+- `csv_decimals`: Anzahl Nachkommastellen fuer numerische CSV-Spalten
+- `csv_decimal_mode`:
+- `fixed` = feste Nachkommastellen (z. B. `520,0`, `0,5`)
+- `trim` = unnoetige Nachkommastellen entfernen
+- `csv_material_name_mode`:
+- `material` = `material_name` entspricht `material`
+- `typed_dimensions` = materialbezogene Bezeichnung je Typ:
+- `bar`: `material` + Leerzeichen + `thickness_mm` + `x` + `width_mm`
+- `sheet`: `material` + Leerzeichen + `thickness_mm`
+
+Default im Repository:
+
+- `csv_delimiter = ;`
+- `csv_decimal_separator = ,`
+- `csv_decimals = 1`
+- `csv_decimal_mode = fixed`
+- `csv_material_name_mode = typed_dimensions`
+
+Betroffene numerische CSV-Spalten:
+
+- `length_mm`
+- `width_mm`
+- `thickness_mm`
+- `trim_allowance_mm`
+
+Zusatzspalte:
+
+- `material_name` als zuschnittorientierte Materialbezeichnung (konfigurierbar ueber `csv_material_name_mode`)

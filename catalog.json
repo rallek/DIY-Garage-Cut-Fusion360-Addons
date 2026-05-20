@@ -4,23 +4,40 @@
     {
       "id": "sheet.birch_mpx_19",
       "type": "sheet",
-      "name": "Birke Multiplex 19 mm",
-      "appearance": "Birch",
-      "thickness_mm": 19,
-      "default_trim_allowance_mm": 2
+      "name": "Birke Multiplex",
+      "appearance": "Bambus hell - Halbglanz",
+      "appearance_resolved_name": "Bambus hell - Halbglanz",
+      "appearance_id": "Prism-322",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_bamboo_light_color.jpg",
+      "appearance_texture_preview": "wood_bamboo_light_color.jpg",
+      "preview_texture": "wood_bamboo_light_color.jpg",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none"
     },
     {
       "id": "bar.spruce_44x44",
       "type": "bar",
-      "name": "Fichte KVH 44x44",
-      "appearance": "Spruce"
+      "name": "Fichte KVH",
+      "appearance": "Kiefer",
+      "appearance_resolved_name": "Kiefer",
+      "appearance_id": "Prism-148",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg"
     },
     {
       "id": "edge.abs_white_2",
       "type": "edge",
       "name": "ABS Kante Weiss 2 mm",
-      "appearance": "White",
-      "thickness_mm": 2
+      "appearance": "ABS (Weiß)",
+      "appearance_resolved_name": "ABS (Weiß)",
+      "appearance_id": "Prism-374",
+      "appearance_has_texture": false,
+      "edge_thickness": 2.0
     },
     {
       "id": "profile.alu_u_20",
@@ -29,16 +46,94 @@
       "appearance": "Aluminum"
     },
     {
-      "id": "hardware.confirmat_7x50",
-      "type": "hardware",
-      "name": "Confirmat 7x50",
-      "appearance": "Zinc"
-    },
-    {
       "id": "consumable.pu_glue_d4",
       "type": "consumable",
       "name": "PU Leim D4",
       "appearance": "Beige"
+    },
+    {
+      "id": "sheet.mdf",
+      "type": "sheet",
+      "name": "MDF",
+      "appearance": "MDF",
+      "appearance_resolved_name": "MDF",
+      "appearance_id": "Hardwood",
+      "appearance_has_texture": true,
+      "appearance_texture_color": "granite_base_refl.jpg",
+      "appearance_texture_preview": "granite_base_refl.jpg",
+      "preview_texture": "granite_base_refl.jpg",
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none"
+    },
+    {
+      "id": "bar.kvh",
+      "type": "bar",
+      "name": "KVH",
+      "appearance": "Kiefer",
+      "appearance_resolved_name": "Kiefer",
+      "appearance_id": "Prism-148",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg"
+    },
+    {
+      "id": "sheet.brett",
+      "type": "sheet",
+      "name": "Vollholz",
+      "appearance": "Kiefer",
+      "appearance_resolved_name": "Kiefer",
+      "appearance_id": "Prism-148",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "yes",
+      "sheet_default_grain_direction": "none"
+    },
+    {
+      "id": "edge.melaminharz_buegelkante_weiss",
+      "type": "edge",
+      "name": "Melaminharz Bügelkante Weiß",
+      "appearance": "ABS (Weiß)",
+      "appearance_resolved_name": "ABS (Weiß)",
+      "appearance_id": "Prism-374",
+      "appearance_has_texture": false,
+      "edge_thickness": 0.5
+    },
+    {
+      "id": "profile.item_profil",
+      "type": "profile",
+      "name": "Item-Profil",
+      "appearance": "Aluminium - satiniert",
+      "appearance_resolved_name": "Aluminium - satiniert",
+      "appearance_id": "PrismMaterial-306_physmat_aspects:Prism-028",
+      "appearance_has_texture": false
+    },
+    {
+      "id": "sheet.spanplatte_weiss",
+      "type": "sheet",
+      "name": "Spanplatte weiß",
+      "appearance": "Acetalharz (Weiß)",
+      "appearance_resolved_name": "Acetalharz (Weiß)",
+      "appearance_id": "Prism-376",
+      "appearance_has_texture": false,
+      "sheet_default_trim_allowance": 2.0,
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none"
+    },
+    {
+      "id": "edge.abs_kante_weiss_1_mm",
+      "type": "edge",
+      "name": "ABS Kante Weiss 1 mm",
+      "appearance": "ABS (Weiß)",
+      "edge_thickness": 1.0,
+      "appearance_resolved_name": "ABS (Weiß)",
+      "appearance_id": "Prism-374",
+      "appearance_has_texture": false
     }
   ]
 }
