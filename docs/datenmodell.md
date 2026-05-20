@@ -113,9 +113,6 @@ short_pos
 short_neg
 ```
 
-Legacy-Werte `long_side` / `short_side` können in älteren Datensätzen vorkommen
-und werden beim Laden weiterhin unterstützt.
-
 ---
 
 # Appearance

@@ -495,8 +495,7 @@ class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
             event_args.areInputsValid = bool(body and material_id)
         except Exception as exc:
             print(f"Properties: ValidateInputs-Fehler: {exc}")
-            # Kein Hard-Block durch temporäre UI-State-Inkonsistenz.
-            event_args.areInputsValid = True
+            event_args.areInputsValid = False
 
 
 def _load_material_entries():
@@ -1011,6 +1010,11 @@ def _populate_edge_dropdown(dropdown, selected_edge_id=None):
         dropdown.listItems.add(label, is_selected)
         if is_selected:
             selected_found = True
+    if not selected_found and selected_edge_id not in (None, ""):
+        unknown_label = f"[Ungültige Kante] {selected_edge_id}"
+        _edge_label_to_id[unknown_label] = str(selected_edge_id)
+        dropdown.listItems.add(unknown_label, True)
+        selected_found = True
     if not selected_found and dropdown.listItems.count > 0:
         dropdown.listItems.item(0).isSelected = True
 
@@ -1227,11 +1231,6 @@ def _canonical_front_key_from_reference(front_reference):
     value = str(front_reference or "").strip().lower()
     if value in ("long_pos", "long_neg", "short_pos", "short_neg"):
         return value
-    # Legacy fallback for already persisted data.
-    if value == "long_side":
-        return "long_pos"
-    if value == "short_side":
-        return "short_pos"
     return ""
 
 
