@@ -65,6 +65,8 @@ _edge_entries = []
 _edge_by_id = {}
 _edge_label_to_id = {}
 _edge_id_to_label = {}
+_front_face_token = ""
+_front_body_token = ""
 _ui_lang = "de"
 
 _STRINGS = {
@@ -295,11 +297,15 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
 
             if changed.id == _INPUT_FRONT_FACE:
                 body = _read_selected_body(inputs)
-                if body:
-                    _validate_front_face_selection(inputs, body)
-                    _sync_edge_controls_from_body_attributes(inputs, body)
-                    _set_edge_dropdown_enabled_state(inputs)
-                    _apply_edge_appearance_preview(inputs)
+                if not body:
+                    _set_front_face_selection(inputs, None)
+                    _clear_front_face_memory()
+                    _set_edge_controls_visible(inputs, False)
+                    return
+                _validate_front_face_selection(inputs, body)
+                _sync_edge_controls_from_body_attributes(inputs, body)
+                _set_edge_dropdown_enabled_state(inputs)
+                _apply_edge_appearance_preview(inputs)
                 return
 
             if changed.id in (
@@ -545,12 +551,14 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_edge_enabled(inputs, _INPUT_EDGE_RIGHT_ENABLED, False)
         _set_main_controls_visible(inputs, False)
         _set_edge_controls_visible(inputs, False)
+        _clear_front_face_memory()
         return
 
     _set_main_controls_visible(inputs, True)
-    front_face = _selected_front_face(inputs)
+    front_face = _selected_or_restored_front_face(inputs, body)
     if front_face and not _face_belongs_to_body(front_face, body):
         _set_front_face_selection(inputs, None)
+        _clear_front_face_memory()
 
     _set_input_value(inputs, _INPUT_SIZE, _format_body_size(body))
     material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
@@ -583,7 +591,7 @@ def _refresh_inputs_from_selected_body(inputs):
     _ensure_front_face_from_attributes(inputs, body)
     _sync_edge_controls_from_body_attributes(inputs, body)
     _set_edge_dropdown_enabled_state(inputs)
-    _set_edge_controls_visible(inputs, bool(_selected_front_face(inputs)))
+    _set_edge_controls_visible(inputs, bool(_selected_or_restored_front_face(inputs, body)))
 
 
 def _populate_material_dropdown(dropdown, selected_material_id=None, filter_type=None):
@@ -645,6 +653,15 @@ def _set_edge_controls_visible(inputs, visible):
         item = inputs.itemById(input_id)
         if item:
             item.isVisible = bool(visible)
+    for enabled_id in (
+        _INPUT_EDGE_FRONT_ENABLED,
+        _INPUT_EDGE_BACK_ENABLED,
+        _INPUT_EDGE_LEFT_ENABLED,
+        _INPUT_EDGE_RIGHT_ENABLED,
+    ):
+        enabled_item = _edge_enabled_input(inputs, enabled_id)
+        if enabled_item:
+            enabled_item.isEnabled = True
 
 
 def _front_face_selection_input(inputs):
@@ -676,6 +693,58 @@ def _set_front_face_selection(inputs, face):
         sel.addSelection(face)
     except Exception as exc:
         print(f"Properties: Vorderkantenfläche konnte nicht gesetzt werden: {exc}")
+
+
+def _clear_front_face_memory():
+    global _front_face_token, _front_body_token
+    _front_face_token = ""
+    _front_body_token = ""
+
+
+def _remember_front_face_selection(body, face):
+    global _front_face_token, _front_body_token
+    _front_body_token = _get_entity_token(body) or ""
+    _front_face_token = _get_entity_token(face) or ""
+
+
+def _selected_or_restored_front_face(inputs, body):
+    face = _selected_front_face(inputs)
+    if face:
+        if _face_belongs_to_body(face, body):
+            _remember_front_face_selection(body, face)
+            return face
+        _set_front_face_selection(inputs, None)
+        _clear_front_face_memory()
+        return None
+    return _restore_front_face_from_memory(inputs, body)
+
+
+def _restore_front_face_from_memory(inputs, body):
+    if not body:
+        return None
+    body_token = _get_entity_token(body) or ""
+    if not body_token or body_token != _front_body_token or not _front_face_token:
+        return None
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct) if app else None
+    if not design:
+        return None
+    try:
+        entities = design.findEntityByToken(_front_face_token)
+    except Exception:
+        return None
+    if not entities:
+        return None
+    for entity in entities:
+        candidate = adsk.fusion.BRepFace.cast(entity)
+        if not candidate:
+            continue
+        native = adsk.fusion.BRepFace.cast(getattr(candidate, "nativeObject", None))
+        face = native if native else candidate
+        if _face_belongs_to_body(face, body):
+            _set_front_face_selection(inputs, face)
+            return face
+    return None
 
 
 def _format_edge_label(entry):
@@ -823,14 +892,17 @@ def _material_requires_grain_direction(entry):
 
 
 def _validate_front_face_selection(inputs, body):
-    front_face = _selected_front_face(inputs)
+    front_face = _selected_or_restored_front_face(inputs, body)
     if not front_face:
         _set_edge_controls_visible(inputs, False)
+        _clear_front_face_memory()
         return
     if not _face_belongs_to_body(front_face, body):
         _set_front_face_selection(inputs, None)
         _set_edge_controls_visible(inputs, False)
+        _clear_front_face_memory()
         raise RuntimeError("Gewählte Vorderkantenfläche gehört nicht zum ausgewählten Body.")
+    _remember_front_face_selection(body, front_face)
     _set_edge_controls_visible(inputs, True)
 
 
@@ -840,11 +912,23 @@ def _face_belongs_to_body(face, body):
         return False
     native_face_body = adsk.fusion.BRepBody.cast(getattr(face_body, "nativeObject", None))
     native_body = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
-    return face_body is body or face_body is native_body or native_face_body is body or native_face_body is native_body
+    if face_body is body or face_body is native_body or native_face_body is body or native_face_body is native_body:
+        return True
+    face_tokens = {
+        _get_entity_token(face_body) or "",
+        _get_entity_token(native_face_body) or "",
+    }
+    body_tokens = {
+        _get_entity_token(body) or "",
+        _get_entity_token(native_body) or "",
+    }
+    face_tokens.discard("")
+    body_tokens.discard("")
+    return bool(face_tokens and body_tokens and (face_tokens & body_tokens))
 
 
 def _ensure_front_face_from_attributes(inputs, body):
-    if _selected_front_face(inputs):
+    if _selected_or_restored_front_face(inputs, body):
         return
     front_reference = str(_get_attr(body, ATTR_KEY_FRONT_REFERENCE, "") or "").strip().lower()
     if front_reference not in ("long_side", "short_side"):
@@ -853,7 +937,10 @@ def _ensure_front_face_from_attributes(inputs, body):
         return
     canonical_faces = _detect_canonical_side_faces(body)
     key = "long_pos" if front_reference == "long_side" else "short_pos"
-    _set_front_face_selection(inputs, canonical_faces.get(key))
+    face = canonical_faces.get(key)
+    _set_front_face_selection(inputs, face)
+    if face:
+        _remember_front_face_selection(body, face)
 
 
 def _has_any_edge_attribute(body):
@@ -906,9 +993,7 @@ def _apply_edge_appearance_preview(inputs):
     try:
         side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
         if not side_faces:
-            _set_edge_controls_visible(inputs, False)
             return
-        _set_edge_controls_visible(inputs, True)
         _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_enabled_edge_values(inputs))
     except Exception as exc:
         print(f"Properties: Kanten-Preview fehlgeschlagen: {exc}")
@@ -943,9 +1028,11 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
 
 
 def _resolve_side_faces_from_front_selection(inputs, body):
-    front_face = _selected_front_face(inputs)
+    front_face = _selected_or_restored_front_face(inputs, body)
     if not front_face:
         return {}, ""
+    if not _face_belongs_to_body(front_face, body):
+        raise RuntimeError("Gewählte Vorderkantenfläche gehört nicht zum ausgewählten Body.")
     axis_info = _edge_axis_info(body)
     if not axis_info:
         raise RuntimeError("Bauteilachsen konnten nicht bestimmt werden.")
