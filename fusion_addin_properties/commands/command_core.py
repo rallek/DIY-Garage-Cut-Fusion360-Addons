@@ -46,6 +46,8 @@ _INPUT_TRIM_ALLOWANCE = "diygc_trim_allowance_mm"
 _INPUT_GRAIN_DIRECTION = "diygc_grain_direction"
 _INPUT_FRONT_FACE = "diygc_front_face"
 _INPUT_EDGES_HEADER = "diygc_edges_header"
+_INPUT_EDGE_MODE = "diygc_edge_mode"
+_INPUT_EDGE_ALL = "diygc_edge_all"
 _INPUT_EDGE_FRONT_ENABLED = "diygc_edge_front_enabled"
 _INPUT_EDGE_FRONT = "diygc_edge_front"
 _INPUT_EDGE_BACK_ENABLED = "diygc_edge_back_enabled"
@@ -54,6 +56,8 @@ _INPUT_EDGE_LEFT_ENABLED = "diygc_edge_left_enabled"
 _INPUT_EDGE_LEFT = "diygc_edge_left"
 _INPUT_EDGE_RIGHT_ENABLED = "diygc_edge_right_enabled"
 _INPUT_EDGE_RIGHT = "diygc_edge_right"
+_INPUT_SURFACE_MODE = "diygc_surface_mode"
+_INPUT_SURFACE_ALL_TEXT = "diygc_surface_all_text"
 _INPUT_TOP_FACE = "diygc_top_face"
 _INPUT_TOP_TEXT = "diygc_top_text"
 _INPUT_BOTTOM_FACE = "diygc_bottom_face"
@@ -92,6 +96,11 @@ _STRINGS = {
         "grain_width": "Quer",
         "front_face": "Vorderkante (Fläche)",
         "edges_section": "Bekantung und Oberflächen",
+        "mode": "Modus",
+        "mode_none": "Keine",
+        "mode_all": "Alle gemeinsam",
+        "mode_individual": "Individuell",
+        "edge_all": "Kantenmaterial (alle)",
         "edge_none": "(Keine Kante)",
         "edge_front_enabled": "Vorne bekanten",
         "edge_front": "Kante vorne",
@@ -102,6 +111,7 @@ _STRINGS = {
         "edge_right_enabled": "Rechts bekanten",
         "edge_right": "Kante rechts",
         "top_face": "Fläche oben",
+        "surface_all_text": "Oberfläche (alle)",
         "top_text": "Oberfläche oben",
         "bottom_face": "Fläche unten",
         "bottom_text": "Oberfläche unten",
@@ -123,6 +133,11 @@ _STRINGS = {
         "grain_width": "Width",
         "front_face": "Front edge (face)",
         "edges_section": "Edge banding and surfaces",
+        "mode": "Mode",
+        "mode_none": "None",
+        "mode_all": "All together",
+        "mode_individual": "Individual",
+        "edge_all": "Edge material (all)",
         "edge_none": "(No edge)",
         "edge_front_enabled": "Band front",
         "edge_front": "Front edge",
@@ -133,6 +148,7 @@ _STRINGS = {
         "edge_right_enabled": "Band right",
         "edge_right": "Right edge",
         "top_face": "Top face",
+        "surface_all_text": "Surface (all)",
         "top_text": "Top surface",
         "bottom_face": "Bottom face",
         "bottom_text": "Bottom surface",
@@ -225,6 +241,14 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGES_HEADER, "", _t("edges_section"), 1, True)
         edges_header.isFullWidth = True
 
+        edge_mode = inputs.addDropDownCommandInput(
+            _INPUT_EDGE_MODE, _t("mode"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        _populate_mode_dropdown(edge_mode, "individual")
+        edge_all = inputs.addDropDownCommandInput(
+            _INPUT_EDGE_ALL, _t("edge_all"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+
         edge_front_enabled = inputs.addBoolValueInput(
             _INPUT_EDGE_FRONT_ENABLED, _t("edge_front_enabled"), True, "", False
         )
@@ -252,11 +276,17 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         top_face = inputs.addSelectionInput(_INPUT_TOP_FACE, _t("top_face"), _t("face_prompt"))
         top_face.addSelectionFilter("PlanarFaces")
         top_face.setSelectionLimits(0, 1)
+        surface_mode = inputs.addDropDownCommandInput(
+            _INPUT_SURFACE_MODE, _t("mode"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        _populate_mode_dropdown(surface_mode, "individual")
+        surface_all_text = inputs.addStringValueInput(_INPUT_SURFACE_ALL_TEXT, _t("surface_all_text"), "")
         top_text = inputs.addStringValueInput(_INPUT_TOP_TEXT, _t("top_text"), "")
         bottom_face = inputs.addSelectionInput(_INPUT_BOTTOM_FACE, _t("bottom_face"), _t("face_prompt"))
         bottom_face.addSelectionFilter("PlanarFaces")
         bottom_face.setSelectionLimits(0, 1)
         bottom_text = inputs.addStringValueInput(_INPUT_BOTTOM_TEXT, _t("bottom_text"), "")
+        _populate_edge_dropdown(edge_all, None)
         _populate_edge_dropdown(edge_front, None)
         _populate_edge_dropdown(edge_back, None)
         _populate_edge_dropdown(edge_left, None)
@@ -346,7 +376,20 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 _apply_edge_appearance_preview(inputs)
                 return
 
-            if changed.id in (_INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
+            if changed.id in (_INPUT_EDGE_MODE, _INPUT_SURFACE_MODE):
+                if changed.id == _INPUT_SURFACE_MODE:
+                    mode = _read_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "none")
+                    if mode == "all":
+                        all_text = _read_string_input(inputs, _INPUT_SURFACE_ALL_TEXT, "").strip()
+                        if not all_text:
+                            top_text = _read_string_input(inputs, _INPUT_TOP_TEXT, "").strip()
+                            bottom_text = _read_string_input(inputs, _INPUT_BOTTOM_TEXT, "").strip()
+                            _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, top_text or bottom_text)
+                _set_edge_dropdown_enabled_state(inputs)
+                _apply_edge_appearance_preview(inputs)
+                return
+
+            if changed.id in (_INPUT_EDGE_ALL, _INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
                 _apply_edge_appearance_preview(inputs)
                 return
         except Exception as exc:
@@ -397,10 +440,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             else:
                 _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
 
-            _validate_surface_face_selection(inputs, body, _INPUT_TOP_FACE)
-            _validate_surface_face_selection(inputs, body, _INPUT_BOTTOM_FACE)
-            top_text = _read_string_input(inputs, _INPUT_TOP_TEXT, "").strip()
-            bottom_text = _read_string_input(inputs, _INPUT_BOTTOM_TEXT, "").strip()
+            top_text, bottom_text = _read_surface_texts_for_mode(inputs, body)
             if top_text:
                 _write_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_TEXT, top_text)
             else:
@@ -419,7 +459,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
                 _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
             else:
                 _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
-                edge_values = _read_enabled_edge_values(inputs, require_material=True)
+                edge_values = _read_edge_values_for_mode(inputs, require_material=True)
                 for attr_key, edge_id in edge_values.items():
                     if edge_id:
                         _write_body_attribute_or_raise(body, attr_key, edge_id)
@@ -430,7 +470,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
                 _apply_material_appearance_or_raise(body, material_id)
 
             if side_faces:
-                _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_enabled_edge_values(inputs))
+                _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_edge_values_for_mode(inputs))
 
             if _is_body_likely_read_only(body):
                 diag = _diagnose_attribute_context(body)
@@ -582,6 +622,10 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_grain_direction_dropdown(inputs, "none")
         _update_grain_direction_visibility(inputs, None)
         _set_front_face_selection(inputs, None)
+        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+        _set_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "none")
+        _set_edge_dropdown_value(inputs, _INPUT_EDGE_ALL, "")
+        _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
         _set_top_face_selection(inputs, None)
         _set_bottom_face_selection(inputs, None)
         _set_input_value(inputs, _INPUT_TOP_TEXT, "")
@@ -638,8 +682,19 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_grain_direction_dropdown(inputs, "none")
 
     _ensure_front_face_from_attributes(inputs, body)
-    _set_input_value(inputs, _INPUT_TOP_TEXT, str(_get_attr(body, ATTR_KEY_SURFACE_TOP_TEXT, "") or "").strip())
-    _set_input_value(inputs, _INPUT_BOTTOM_TEXT, str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, "") or "").strip())
+    top_text = str(_get_attr(body, ATTR_KEY_SURFACE_TOP_TEXT, "") or "").strip()
+    bottom_text = str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, "") or "").strip()
+    _set_input_value(inputs, _INPUT_TOP_TEXT, top_text)
+    _set_input_value(inputs, _INPUT_BOTTOM_TEXT, bottom_text)
+    if not top_text and not bottom_text:
+        _set_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "none")
+        _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
+    elif top_text and top_text == bottom_text:
+        _set_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "all")
+        _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, top_text)
+    else:
+        _set_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "individual")
+        _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
     _sync_edge_controls_from_body_attributes(inputs, body)
     _set_edge_dropdown_enabled_state(inputs)
     _set_edge_controls_visible(inputs, bool(_selected_or_restored_front_face(inputs, body)))
@@ -691,6 +746,8 @@ def _set_main_controls_visible(inputs, visible):
 def _set_edge_controls_visible(inputs, visible):
     edge_ids = (
         _INPUT_EDGES_HEADER,
+        _INPUT_EDGE_MODE,
+        _INPUT_EDGE_ALL,
         _INPUT_EDGE_FRONT_ENABLED,
         _INPUT_EDGE_FRONT,
         _INPUT_EDGE_BACK_ENABLED,
@@ -699,6 +756,8 @@ def _set_edge_controls_visible(inputs, visible):
         _INPUT_EDGE_LEFT,
         _INPUT_EDGE_RIGHT_ENABLED,
         _INPUT_EDGE_RIGHT,
+        _INPUT_SURFACE_MODE,
+        _INPUT_SURFACE_ALL_TEXT,
         _INPUT_TOP_FACE,
         _INPUT_TOP_TEXT,
         _INPUT_BOTTOM_FACE,
@@ -831,6 +890,40 @@ def _format_edge_label(entry):
     return f"{entry.name} ({thickness} mm)"
 
 
+def _populate_mode_dropdown(dropdown, selected_mode):
+    if not dropdown:
+        return
+    dropdown.listItems.clear()
+    wanted = str(selected_mode or "none").strip().lower()
+    if wanted not in ("none", "all", "individual"):
+        wanted = "none"
+    options = [
+        ("none", _t("mode_none")),
+        ("all", _t("mode_all")),
+        ("individual", _t("mode_individual")),
+    ]
+    for value, label in options:
+        dropdown.listItems.add(label, value == wanted)
+
+
+def _read_mode_dropdown(inputs, input_id, fallback):
+    label = _read_dropdown_value(inputs, input_id, "")
+    mapping = {
+        _t("mode_none").lower(): "none",
+        _t("mode_all").lower(): "all",
+        _t("mode_individual").lower(): "individual",
+    }
+    mode = mapping.get(label.lower(), fallback)
+    if mode not in ("none", "all", "individual"):
+        return fallback
+    return mode
+
+
+def _set_mode_dropdown(inputs, input_id, mode):
+    dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
+    _populate_mode_dropdown(dropdown, mode)
+
+
 def _populate_edge_dropdown(dropdown, selected_edge_id=None):
     global _edge_label_to_id, _edge_id_to_label
     if not dropdown:
@@ -886,6 +979,14 @@ def _set_edge_enabled(inputs, enabled_input_id, enabled):
 
 
 def _set_edge_dropdown_enabled_state(inputs):
+    edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+    surface_mode = _read_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "none")
+
+    edge_all = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_EDGE_ALL))
+    if edge_all:
+        edge_all.isVisible = edge_mode == "all"
+        edge_all.isEnabled = edge_mode == "all"
+
     mapping = {
         _INPUT_EDGE_FRONT_ENABLED: _INPUT_EDGE_FRONT,
         _INPUT_EDGE_BACK_ENABLED: _INPUT_EDGE_BACK,
@@ -893,9 +994,28 @@ def _set_edge_dropdown_enabled_state(inputs):
         _INPUT_EDGE_RIGHT_ENABLED: _INPUT_EDGE_RIGHT,
     }
     for enabled_id, dropdown_id in mapping.items():
+        enabled_item = _edge_enabled_input(inputs, enabled_id)
         dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(dropdown_id))
+        is_visible = edge_mode == "individual"
+        if enabled_item:
+            enabled_item.isVisible = is_visible
+            enabled_item.isEnabled = is_visible
         if dropdown:
-            dropdown.isEnabled = _is_edge_enabled(inputs, enabled_id)
+            dropdown.isVisible = is_visible
+            dropdown.isEnabled = is_visible and _is_edge_enabled(inputs, enabled_id)
+
+    surface_all = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_SURFACE_ALL_TEXT))
+    if surface_all:
+        surface_all.isVisible = surface_mode == "all"
+        surface_all.isEnabled = surface_mode == "all"
+    top_face = adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_TOP_FACE))
+    top_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_TOP_TEXT))
+    bottom_face = adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_BOTTOM_FACE))
+    bottom_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_BOTTOM_TEXT))
+    for item in (top_face, top_text, bottom_face, bottom_text):
+        if item:
+            item.isVisible = surface_mode == "individual"
+            item.isEnabled = surface_mode == "individual"
 
 
 def _set_filter_dropdown_value(inputs, type_id):
@@ -1047,6 +1167,20 @@ def _sync_edge_controls_from_body_attributes(inputs, body):
         ATTR_KEY_EDGE_LEFT: str(_get_attr(body, ATTR_KEY_EDGE_LEFT, "") or "").strip(),
         ATTR_KEY_EDGE_RIGHT: str(_get_attr(body, ATTR_KEY_EDGE_RIGHT, "") or "").strip(),
     }
+    edge_values = [values[ATTR_KEY_EDGE_FRONT], values[ATTR_KEY_EDGE_BACK], values[ATTR_KEY_EDGE_LEFT], values[ATTR_KEY_EDGE_RIGHT]]
+    non_empty = [value for value in edge_values if value]
+    if not non_empty:
+        edge_mode = "none"
+        edge_all_value = ""
+    elif len(non_empty) == 4 and len(set(edge_values)) == 1:
+        edge_mode = "all"
+        edge_all_value = edge_values[0]
+    else:
+        edge_mode = "individual"
+        edge_all_value = ""
+    _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, edge_mode)
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_ALL, edge_all_value)
+
     _set_edge_enabled(inputs, _INPUT_EDGE_FRONT_ENABLED, bool(values[ATTR_KEY_EDGE_FRONT]))
     _set_edge_enabled(inputs, _INPUT_EDGE_BACK_ENABLED, bool(values[ATTR_KEY_EDGE_BACK]))
     _set_edge_enabled(inputs, _INPUT_EDGE_LEFT_ENABLED, bool(values[ATTR_KEY_EDGE_LEFT]))
@@ -1076,6 +1210,42 @@ def _read_enabled_edge_values(inputs, require_material=False):
     return values
 
 
+def _read_edge_values_for_mode(inputs, require_material=False):
+    mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+    if mode == "none":
+        return {
+            ATTR_KEY_EDGE_FRONT: "",
+            ATTR_KEY_EDGE_BACK: "",
+            ATTR_KEY_EDGE_LEFT: "",
+            ATTR_KEY_EDGE_RIGHT: "",
+        }
+    if mode == "all":
+        edge_id = _read_edge_dropdown_value(inputs, _INPUT_EDGE_ALL)
+        if require_material and not edge_id:
+            raise RuntimeError("Für Modus 'Alle gemeinsam' muss ein Kantenmaterial gewählt werden.")
+        return {
+            ATTR_KEY_EDGE_FRONT: edge_id,
+            ATTR_KEY_EDGE_BACK: edge_id,
+            ATTR_KEY_EDGE_LEFT: edge_id,
+            ATTR_KEY_EDGE_RIGHT: edge_id,
+        }
+    return _read_enabled_edge_values(inputs, require_material=require_material)
+
+
+def _read_surface_texts_for_mode(inputs, body):
+    mode = _read_mode_dropdown(inputs, _INPUT_SURFACE_MODE, "none")
+    if mode == "none":
+        return "", ""
+    if mode == "all":
+        text = _read_string_input(inputs, _INPUT_SURFACE_ALL_TEXT, "").strip()
+        return text, text
+    _validate_surface_face_selection(inputs, body, _INPUT_TOP_FACE)
+    _validate_surface_face_selection(inputs, body, _INPUT_BOTTOM_FACE)
+    top_text = _read_string_input(inputs, _INPUT_TOP_TEXT, "").strip()
+    bottom_text = _read_string_input(inputs, _INPUT_BOTTOM_TEXT, "").strip()
+    return top_text, bottom_text
+
+
 def _apply_edge_appearance_preview(inputs):
     body = _read_selected_body(inputs)
     if not body:
@@ -1084,7 +1254,7 @@ def _apply_edge_appearance_preview(inputs):
         side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
         if not side_faces:
             return
-        _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_enabled_edge_values(inputs))
+        _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_edge_values_for_mode(inputs))
     except Exception as exc:
         print(f"Properties: Kanten-Preview fehlgeschlagen: {exc}")
 
