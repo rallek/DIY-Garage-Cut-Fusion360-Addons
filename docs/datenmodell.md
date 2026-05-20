@@ -161,12 +161,33 @@ length_mm
 width_mm
 thickness_mm
 trim_allowance_mm
+edge_front_thickness_mm
+edge_back_thickness_mm
+edge_left_thickness_mm
+edge_right_thickness_mm
 ```
 
 Zusätzliche Spalte:
 
 ```text
 material_name
+```
+
+Kanten-Exportspalten:
+
+```text
+edge_front_id
+edge_front_name
+edge_front_thickness_mm
+edge_back_id
+edge_back_name
+edge_back_thickness_mm
+edge_left_id
+edge_left_name
+edge_left_thickness_mm
+edge_right_id
+edge_right_name
+edge_right_thickness_mm
 ```
 
 `material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.

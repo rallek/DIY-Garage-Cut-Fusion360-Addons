@@ -12,8 +12,13 @@ from shared.catalog import get_type_fields, get_type_label, load_catalog
 _ATTRIBUTE_GROUP = "DIYGarageCut.part_metadata"
 _ATTR_KEY_TRIM_ALLOWANCE_MM = "trim_allowance_mm"
 _ATTR_KEY_GRAIN_DIRECTION = "grain_direction"
+_ATTR_KEY_EDGE_FRONT = "edge_front"
+_ATTR_KEY_EDGE_BACK = "edge_back"
+_ATTR_KEY_EDGE_LEFT = "edge_left"
+_ATTR_KEY_EDGE_RIGHT = "edge_right"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
+_TYPE_FIELD_EDGE_THICKNESS = "edge_thickness"
 
 _handlers = []
 _active_panel_id = None
@@ -179,6 +184,10 @@ def _body_to_csv_row(body, catalog):
     grain_direction = _resolve_grain_direction_for_export(body, catalog_item)
     material_name = str(catalog_item.name or "").strip() or "-"
     export_material_name = _build_export_material_name(catalog_item, thickness, width, material_name)
+    edge_front = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_FRONT)
+    edge_back = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_BACK)
+    edge_left = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_LEFT)
+    edge_right = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_RIGHT)
     return [
         name,
         length,
@@ -189,6 +198,18 @@ def _body_to_csv_row(body, catalog):
         grain_direction,
         material_name,
         export_material_name,
+        edge_front[0],
+        edge_front[1],
+        edge_front[2],
+        edge_back[0],
+        edge_back[1],
+        edge_back[2],
+        edge_left[0],
+        edge_left[1],
+        edge_left[2],
+        edge_right[0],
+        edge_right[1],
+        edge_right[2],
     ]
 
 
@@ -400,6 +421,57 @@ def _resolve_grain_direction_for_export(body, catalog_item):
     return "none"
 
 
+def _resolve_edge_export_for_side(body, catalog, attr_key):
+    attrs = _collect_body_attributes(body)
+    edge_id = ""
+    for group, key, value in attrs:
+        if group != _ATTRIBUTE_GROUP:
+            continue
+        if key != attr_key:
+            continue
+        edge_id = str(value or "").strip()
+        break
+
+    if not edge_id:
+        return ("", "", "")
+
+    edge_item = catalog.get(edge_id)
+    if not edge_item:
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert Kantenmaterial '{edge_id}', "
+            "das nicht in catalog.json existiert."
+        )
+    if edge_item.type != "edge":
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert '{edge_id}', "
+            "aber der Katalogeintrag ist nicht vom Typ 'edge'."
+        )
+
+    thickness = _extract_edge_thickness(edge_item)
+    return (
+        edge_item.id,
+        str(edge_item.name or "").strip(),
+        _fmt_mm(thickness),
+    )
+
+
+def _extract_edge_thickness(catalog_item):
+    raw = (catalog_item.properties or {}).get(_TYPE_FIELD_EDGE_THICKNESS)
+    if raw in (None, ""):
+        return 0.0
+    try:
+        numeric = float(raw)
+    except Exception as exc:
+        raise ValueError(
+            f"Katalogeintrag '{catalog_item.id}' hat ungültige edge_thickness: {raw}"
+        ) from exc
+    if numeric < 0:
+        raise ValueError(
+            f"Katalogeintrag '{catalog_item.id}' hat negative edge_thickness: {raw}"
+        )
+    return numeric
+
+
 def _material_type_supports_grain(material_type):
     type_name = str(material_type or "").strip()
     if not type_name:
@@ -461,6 +533,18 @@ def _write_csv(path, rows):
         "grain_direction",
         "material",
         "material_name",
+        "edge_front_id",
+        "edge_front_name",
+        "edge_front_thickness_mm",
+        "edge_back_id",
+        "edge_back_name",
+        "edge_back_thickness_mm",
+        "edge_left_id",
+        "edge_left_name",
+        "edge_left_thickness_mm",
+        "edge_right_id",
+        "edge_right_name",
+        "edge_right_thickness_mm",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())
@@ -609,7 +693,8 @@ def _get_csv_material_name_mode():
 def _format_csv_row_for_numeric_format(row, decimal_separator, decimals, decimal_mode):
     # Numeric export columns by contract:
     # 1=length_mm, 2=width_mm, 3=thickness_mm, 5=trim_allowance_mm
-    numeric_indices = {1, 2, 3, 5}
+    # 11/14/17/20=edge_*_thickness_mm
+    numeric_indices = {1, 2, 3, 5, 11, 14, 17, 20}
     out = list(row)
     for idx in numeric_indices:
         if idx >= len(out):
