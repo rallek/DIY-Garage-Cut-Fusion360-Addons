@@ -92,6 +92,8 @@ edge_front
 edge_back
 edge_left
 edge_right
+surface_top_text
+surface_bottom_text
 
 notes
 
@@ -105,12 +107,11 @@ exclude_from_export
 Werte:
 
 ```text
-long_side
-short_side
+long_pos
+long_neg
+short_pos
+short_neg
 ```
-
-`Richtung tauschen` ist nur UI-Logik.
-Kein zusätzliches CSV-Feld.
 
 ---
 
@@ -161,12 +162,31 @@ length_mm
 width_mm
 thickness_mm
 trim_allowance_mm
+edge_front_thickness_mm
+edge_back_thickness_mm
+edge_left_thickness_mm
+edge_right_thickness_mm
 ```
 
 Zusätzliche Spalte:
 
 ```text
 material_name
+```
+
+Kanten-Exportspalten:
+
+```text
+edge_front_name
+edge_front_thickness_mm
+edge_back_name
+edge_back_thickness_mm
+edge_left_name
+edge_left_thickness_mm
+edge_right_name
+edge_right_thickness_mm
+surface_top_text
+surface_bottom_text
 ```
 
 `material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.
