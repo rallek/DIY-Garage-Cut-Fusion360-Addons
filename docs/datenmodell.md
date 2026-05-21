@@ -203,6 +203,8 @@ notes
 
 Für Kanten und Oberflächen kann statt eines Katalogeintrags der Sonderwert `__text__` gespeichert werden. Dann muss das zugehörige `*_custom_text`-Attribut gefüllt sein. Beim CSV-Export wird dieser Freitext als Name ausgegeben. Bei Kanten ist die exportierte Dicke in diesem Fall `0`.
 
+Im Modus `Alle gemeinsam` wird eine gemeinsame Oberflächenauswahl auf `surface_top` und `surface_bottom` geschrieben. Für die vier Kanten wird derselbe Name als Freitext-Kante gespeichert; die Kantenstärke bleibt dabei `0`.
+
 `notes` ist ein separater freier Fertigungshinweis und gehört nicht zur strukturierten Oberflächenauswahl.
 
 `material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.
