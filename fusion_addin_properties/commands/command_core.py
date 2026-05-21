@@ -78,6 +78,7 @@ _INPUT_TOP_SURFACE_TEXT = "diygc_top_surface_text"
 _INPUT_BOTTOM_ENABLED = "diygc_bottom_enabled"
 _INPUT_BOTTOM_SURFACE = "diygc_bottom_surface"
 _INPUT_BOTTOM_SURFACE_TEXT = "diygc_bottom_surface_text"
+_INPUT_SWAP_LEFT_RIGHT = "diygc_swap_left_right"
 _INPUT_SWAP_SURFACES = "diygc_swap_surfaces"
 _INPUT_NOTES_HEADER = "diygc_notes_header"
 _INPUT_NOTES = "diygc_notes"
@@ -140,6 +141,7 @@ _STRINGS = {
         "edge_left": "Kante links",
         "edge_right_enabled": "Rechts bekanten",
         "edge_right": "Kante rechts",
+        "swap_left_right": "Links/Rechts tauschen",
         "surface_all_text": "Oberfläche (alle)",
         "surface_all": "Oberfläche (alle)",
         "top_enabled": "Oberseite bearbeiten",
@@ -186,6 +188,7 @@ _STRINGS = {
         "edge_left": "Left edge",
         "edge_right_enabled": "Band right",
         "edge_right": "Right edge",
+        "swap_left_right": "Swap left/right",
         "surface_all_text": "Surface (all)",
         "surface_all": "Surfaces (all)",
         "top_enabled": "Edit top side",
@@ -353,6 +356,7 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _INPUT_EDGE_RIGHT, _t("edge_right"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
         edge_right_text = inputs.addStringValueInput(_INPUT_EDGE_RIGHT_TEXT, _t("custom_text_value"), "")
+        swap_left_right = inputs.addBoolValueInput(_INPUT_SWAP_LEFT_RIGHT, _t("swap_left_right"), False, "", False)
         top_enabled = inputs.addBoolValueInput(_INPUT_TOP_ENABLED, _t("top_enabled"), True, "", False)
         surface_all_text = inputs.addStringValueInput(_INPUT_SURFACE_ALL_TEXT, _t("surface_all_text"), "")
         top_surface = inputs.addDropDownCommandInput(
@@ -481,6 +485,11 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
             if changed.id == _INPUT_SWAP_SURFACES:
                 _swap_surface_inputs(inputs)
                 _update_edge_surface_ui(inputs, preview_surface=True)
+                return
+
+            if changed.id == _INPUT_SWAP_LEFT_RIGHT:
+                _swap_left_right_edge_inputs(inputs)
+                _update_edge_surface_ui(inputs, preview_edge=True)
                 return
 
             if changed.id == _INPUT_EDGE_MODE:
@@ -965,6 +974,7 @@ def _set_edge_controls_visible(inputs, visible):
         _INPUT_EDGE_RIGHT_ENABLED,
         _INPUT_EDGE_RIGHT,
         _INPUT_EDGE_RIGHT_TEXT,
+        _INPUT_SWAP_LEFT_RIGHT,
         _INPUT_SURFACE_ALL_TEXT,
         _INPUT_TOP_ENABLED,
         _INPUT_TOP_SURFACE,
@@ -1100,6 +1110,7 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
         _set_input_visibility(inputs, dropdown_id, edge_visible)
         edge_is_custom = edge_visible and _read_edge_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
         _set_input_visibility(inputs, text_id, edge_is_custom)
+    _set_input_visibility(inputs, _INPUT_SWAP_LEFT_RIGHT, edge_visible)
 
     surface_visible = section_visible and mode == "individual" and supports_surface and (
         not supports_edges or front_ready
@@ -1478,6 +1489,17 @@ def _swap_surface_inputs(inputs):
     _set_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE, top_value)
     _set_input_value(inputs, _INPUT_TOP_SURFACE_TEXT, bottom_text)
     _set_input_value(inputs, _INPUT_BOTTOM_SURFACE_TEXT, top_text)
+
+
+def _swap_left_right_edge_inputs(inputs):
+    left_value = _read_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT)
+    right_value = _read_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT)
+    left_text = _read_string_input(inputs, _INPUT_EDGE_LEFT_TEXT, "")
+    right_text = _read_string_input(inputs, _INPUT_EDGE_RIGHT_TEXT, "")
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, right_value)
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, left_value)
+    _set_input_value(inputs, _INPUT_EDGE_LEFT_TEXT, right_text)
+    _set_input_value(inputs, _INPUT_EDGE_RIGHT_TEXT, left_text)
 
 
 def _read_surface_dropdown_value(inputs, input_id):
