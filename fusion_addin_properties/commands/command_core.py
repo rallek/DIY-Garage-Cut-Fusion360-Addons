@@ -404,6 +404,8 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_BODY:
+                if not _selected_body_from_input(inputs):
+                    _clear_body_selection_memory()
                 _refresh_inputs_from_selected_body(inputs)
                 return
 
@@ -915,6 +917,7 @@ def _set_edge_controls_visible(inputs, visible):
     edge_ids = (
         _INPUT_EDGES_HEADER,
         _INPUT_EDGE_MODE,
+        _INPUT_FRONT_FACE,
         _INPUT_EDGE_ALL,
         _INPUT_ALL_SURFACE,
         _INPUT_ALL_SURFACE_TEXT,
@@ -1108,6 +1111,15 @@ def _front_face_selection_input(inputs):
 
 def _body_selection_input(inputs):
     return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_BODY))
+
+
+def _selected_body_from_input(inputs):
+    entity = _selection_entity_by_input_id(inputs, _INPUT_BODY)
+    body = adsk.fusion.BRepBody.cast(entity)
+    if not body:
+        return None
+    native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
+    return native if native else body
 
 
 def _selection_entity_by_input_id(inputs, input_id):
@@ -2362,15 +2374,11 @@ def _apply_material_appearance_or_raise(body, material_id):
 
 def _read_selected_body(inputs):
     try:
-        body_entity = _selection_entity_by_input_id(inputs, _INPUT_BODY)
-        body = adsk.fusion.BRepBody.cast(body_entity)
+        body = _selected_body_from_input(inputs)
         if not body:
             return _restore_body_selection_from_memory(inputs)
-
-        native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
-        resolved = native if native else body
-        _remember_body_selection(resolved)
-        return resolved
+        _remember_body_selection(body)
+        return body
     except Exception as exc:
         print(f"Properties: Körperauswahl konnte nicht gelesen werden: {exc}")
     return None
