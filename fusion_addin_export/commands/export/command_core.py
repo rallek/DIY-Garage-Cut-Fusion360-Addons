@@ -18,6 +18,10 @@ _ATTR_KEY_EDGE_LEFT = "edge_left"
 _ATTR_KEY_EDGE_RIGHT = "edge_right"
 _ATTR_KEY_SURFACE_TOP_TEXT = "surface_top_text"
 _ATTR_KEY_SURFACE_BOTTOM_TEXT = "surface_bottom_text"
+_ATTR_KEY_SURFACE_ID = "surface_id"
+_ATTR_KEY_FINISH_MODE = "finish_mode"
+_ATTR_KEY_FINISH_ALL_TEXT = "finish_all_text"
+_ATTR_KEY_FINISH_ALL_SCOPE = "finish_all_scope"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 _TYPE_FIELD_EDGE_THICKNESS = "edge_thickness"
@@ -192,6 +196,10 @@ def _body_to_csv_row(body, catalog):
     edge_right = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_RIGHT)
     surface_top_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_TOP_TEXT)
     surface_bottom_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_BOTTOM_TEXT)
+    surface_name = _resolve_surface_name_for_export(body, catalog)
+    finish_mode = _resolve_text_attribute_for_export(body, _ATTR_KEY_FINISH_MODE)
+    finish_all_scope = _resolve_text_attribute_for_export(body, _ATTR_KEY_FINISH_ALL_SCOPE)
+    finish_all_text = _resolve_text_attribute_for_export(body, _ATTR_KEY_FINISH_ALL_TEXT)
     return [
         name,
         length,
@@ -212,6 +220,10 @@ def _body_to_csv_row(body, catalog):
         edge_right[2],
         surface_top_text,
         surface_bottom_text,
+        surface_name,
+        finish_mode,
+        finish_all_scope,
+        finish_all_text,
     ]
 
 
@@ -458,6 +470,10 @@ def _resolve_edge_export_for_side(body, catalog, attr_key):
 
 
 def _resolve_surface_text_for_export(body, attr_key):
+    return _resolve_text_attribute_for_export(body, attr_key)
+
+
+def _resolve_text_attribute_for_export(body, attr_key):
     attrs = _collect_body_attributes(body)
     for group, key, value in attrs:
         if group != _ATTRIBUTE_GROUP:
@@ -466,6 +482,24 @@ def _resolve_surface_text_for_export(body, attr_key):
             continue
         return str(value or "").strip()
     return ""
+
+
+def _resolve_surface_name_for_export(body, catalog):
+    surface_id = _resolve_text_attribute_for_export(body, _ATTR_KEY_SURFACE_ID)
+    if not surface_id:
+        return ""
+    surface_item = catalog.get(surface_id)
+    if not surface_item:
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert Oberfläche '{surface_id}', "
+            "die nicht in catalog.json existiert."
+        )
+    if surface_item.type != "surface":
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert '{surface_id}', "
+            "aber der Katalogeintrag ist nicht vom Typ 'surface'."
+        )
+    return str(surface_item.name or "").strip()
 
 
 def _extract_edge_thickness(catalog_item):
@@ -556,6 +590,10 @@ def _write_csv(path, rows):
         "edge_right_thickness_mm",
         "surface_top_text",
         "surface_bottom_text",
+        "surface_name",
+        "finish_mode",
+        "finish_all_scope",
+        "finish_all_text",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())

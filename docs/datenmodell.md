@@ -13,6 +13,7 @@ edge
 profile
 hardware
 consumable
+surface
 ```
 
 ## Basisfelder
@@ -94,6 +95,10 @@ edge_left
 edge_right
 surface_top_text
 surface_bottom_text
+surface_id
+finish_mode
+finish_all_text
+finish_all_scope
 
 notes
 
@@ -187,6 +192,30 @@ edge_right_name
 edge_right_thickness_mm
 surface_top_text
 surface_bottom_text
+surface_name
+finish_mode
+finish_all_scope
+finish_all_text
 ```
+
+## Oberflächen-/Fertigungshinweise
+
+`surface_id` verweist optional auf einen Katalogeintrag vom Typ `surface`.
+
+`finish_mode` beschreibt die Semantik der Fertigungsangabe:
+
+```text
+none
+all
+individual
+```
+
+Für Issue #16 wird praktisch `all` verwendet. `finish_all_scope` ist dann:
+
+```text
+all_faces_including_edges
+```
+
+Damit ist im Export eindeutig, dass z. B. `Ölen` allseitig gilt, inklusive Kanten. `finish_all_text` bleibt Freitext und wird unverändert als CSV-Zelle exportiert. Die alten Felder `surface_top_text` und `surface_bottom_text` bleiben aus Rückwärtskompatibilität erhalten.
 
 `material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.

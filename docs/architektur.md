@@ -77,12 +77,19 @@ Typen:
 - profile
 - hardware
 - consumable
+- surface
 
 Typ-spezifische Felder:
 - kommen aus `catalog_type_config.json`
 - werden im Catalog-Dialog dynamisch angezeigt
 - werden bei CSV in `attributes` berücksichtigt
 - Einheiten-/Feldvertrag steht zentral in `docs/datenmodell.md`
+
+Typ-Fähigkeiten:
+- stehen ebenfalls in `catalog_type_config.json`
+- steuern, ob ein Typ als Body-Material wählbar ist
+- steuern, ob Kanten-UI und Oberflächen-/Fertigungshinweise sichtbar sind
+- verhindern feste Typ-Regeln im Dialogcode
 
 ---
 

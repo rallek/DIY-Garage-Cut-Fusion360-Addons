@@ -134,6 +134,24 @@
       "appearance_resolved_name": "ABS (Weiß)",
       "appearance_id": "Prism-374",
       "appearance_has_texture": false
+    },
+    {
+      "id": "surface.oelen",
+      "type": "surface",
+      "name": "Ölen",
+      "appearance": "Kiefer"
+    },
+    {
+      "id": "surface.lack_matt",
+      "type": "surface",
+      "name": "Lackieren matt",
+      "appearance": "Lack - Weiß"
+    },
+    {
+      "id": "surface.hpl_weiss",
+      "type": "surface",
+      "name": "HPL weiß beschichten",
+      "appearance": "Acetalharz (Weiß)"
     }
   ]
 }
