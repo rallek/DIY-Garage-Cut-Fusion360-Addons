@@ -15,7 +15,7 @@ _DEFAULT_TYPE_CONFIG = {
                 "supports_body_material": True,
                 "supports_edges": True,
                 "supports_surface": True,
-                "surface_entry_mode": "global",
+                "surface_entry_mode": "individual",
                 "edge_entry_mode": "individual",
             },
             "fields": [

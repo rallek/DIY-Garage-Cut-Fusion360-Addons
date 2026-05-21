@@ -11,7 +11,7 @@
         "supports_body_material": true,
         "supports_edges": true,
         "supports_surface": true,
-        "surface_entry_mode": "global",
+        "surface_entry_mode": "individual",
         "edge_entry_mode": "individual"
       },
       "fields": [

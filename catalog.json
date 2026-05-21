@@ -152,6 +152,15 @@
       "type": "surface",
       "name": "HPL weiß beschichten",
       "appearance": "Acetalharz (Weiß)"
+    },
+    {
+      "id": "surface.gelb",
+      "type": "surface",
+      "name": "Gelb",
+      "appearance": "Farbe Gelb",
+      "appearance_resolved_name": "Farbe Gelb",
+      "appearance_id": "3053DEF4-565C-4657-810F-823B0FC7CED1",
+      "appearance_has_texture": false
     }
   ]
 }
