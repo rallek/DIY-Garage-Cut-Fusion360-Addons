@@ -180,6 +180,15 @@
       "appearance_texture_preview": "wood_pine_color.jpg",
       "appearance_texture_color": "wood_pine_bump.jpg",
       "preview_texture": "wood_pine_color.jpg"
+    },
+    {
+      "id": "surface.farbe_weiss",
+      "type": "surface",
+      "name": "Farbe weiß",
+      "appearance": "Farbe weiß",
+      "appearance_resolved_name": "Farbe weiß",
+      "appearance_id": "Generic",
+      "appearance_has_texture": false
     }
   ]
 }
