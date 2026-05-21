@@ -599,7 +599,10 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
                 _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
             if entry.supports_surface:
                 _apply_surface_appearance_from_body_faces(
-                    body, surface_values, include_edges=edge_mode == "all"
+                    body,
+                    surface_values,
+                    include_edges=entry.supports_edges and edge_mode == "all",
+                    allow_missing_empty_faces=not _has_any_surface_value(surface_values),
                 )
 
             if _is_body_likely_read_only(body):
@@ -1876,6 +1879,10 @@ def _all_mode_surface_export_name(inputs):
     return str(surface_entry.name or "").strip()
 
 
+def _has_any_surface_value(surface_values):
+    return any(str(value or "").strip() for value in (surface_values or {}).values())
+
+
 def _custom_text_attr_mapping():
     return {
         ATTR_KEY_EDGE_FRONT: ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT,
@@ -1887,9 +1894,12 @@ def _custom_text_attr_mapping():
     }
 
 
-def _apply_surface_appearance_from_body_faces(body, surface_values, include_edges=False):
+def _apply_surface_appearance_from_body_faces(
+    body, surface_values, include_edges=False, allow_missing_empty_faces=False
+):
     face_map = _detect_top_bottom_faces(body)
     base_appearance = _body_material_appearance(body)
+    has_surface_value = _has_any_surface_value(surface_values)
     mapping = {
         ATTR_KEY_SURFACE_TOP: "top",
         ATTR_KEY_SURFACE_BOTTOM: "bottom",
@@ -1898,6 +1908,8 @@ def _apply_surface_appearance_from_body_faces(body, surface_values, include_edge
         surface_id = str(surface_values.get(attr_key, "") or "").strip()
         face = face_map.get(face_key)
         if not face:
+            if allow_missing_empty_faces and not has_surface_value:
+                continue
             raise RuntimeError(f"Fläche für Oberfläche '{face_key}' konnte nicht bestimmt werden.")
         if not surface_id or surface_id == CUSTOM_TEXT_VALUE:
             _apply_face_appearance_or_raise(face, base_appearance, "Oberflächen-Appearance konnte nicht zurückgesetzt werden")
