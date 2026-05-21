@@ -458,7 +458,9 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     _set_edge_controls_visible(inputs, False)
                     return
                 _validate_front_face_selection(inputs, body)
-                _sync_edge_controls_from_body_attributes(inputs, body, preserve_current_mode=True)
+                _sync_edge_controls_from_body_attributes(
+                    inputs, body, preserve_current_mode=True, preserve_edges_enabled=True
+                )
                 _set_edge_dropdown_enabled_state(inputs)
                 _apply_edge_appearance_preview(inputs)
                 return
@@ -1647,7 +1649,9 @@ def _has_any_edge_attribute(body):
     return False
 
 
-def _sync_edge_controls_from_body_attributes(inputs, body, preserve_current_mode=False):
+def _sync_edge_controls_from_body_attributes(
+    inputs, body, preserve_current_mode=False, preserve_edges_enabled=False
+):
     edge_values_by_attr = {
         ATTR_KEY_EDGE_FRONT: str(_get_attr(body, ATTR_KEY_EDGE_FRONT, "") or "").strip(),
         ATTR_KEY_EDGE_BACK: str(_get_attr(body, ATTR_KEY_EDGE_BACK, "") or "").strip(),
@@ -1691,7 +1695,8 @@ def _sync_edge_controls_from_body_attributes(inputs, body, preserve_current_mode
         current_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
         if current_mode in ("all", "individual"):
             mode = current_mode
-    _set_edges_enabled_value(inputs, bool(any_edge_data or any_surface_data))
+    if not preserve_edges_enabled:
+        _set_edges_enabled_value(inputs, bool(any_edge_data or any_surface_data))
 
     _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
     _set_edge_dropdown_value(inputs, _INPUT_EDGE_ALL, edge_values[0] if edge_all_equal else "")
