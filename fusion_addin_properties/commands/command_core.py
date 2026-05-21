@@ -451,7 +451,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_EDGES_ENABLED:
-                _update_edge_surface_ui(inputs, restore_front_face=False, preview_surface=True)
+                _update_edge_surface_ui(inputs, restore_front_face=False, preview_edge=True, preview_surface=True)
                 return
 
             if changed.id == _INPUT_FRONT_FACE:
@@ -1830,9 +1830,16 @@ def _apply_edge_appearance_preview(inputs):
     if not body:
         return
     try:
-        edge_values = _read_edge_values_for_mode(inputs)
-        if not any(str(value or "").strip() for value in edge_values.values()):
-            return
+        edge_values = (
+            _read_edge_values_for_mode(inputs)
+            if _is_edges_enabled(inputs)
+            else {
+                ATTR_KEY_EDGE_FRONT: "",
+                ATTR_KEY_EDGE_BACK: "",
+                ATTR_KEY_EDGE_LEFT: "",
+                ATTR_KEY_EDGE_RIGHT: "",
+            }
+        )
         side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
         if not side_faces:
             return
@@ -1866,14 +1873,14 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
         ATTR_KEY_EDGE_LEFT: "left",
         ATTR_KEY_EDGE_RIGHT: "right",
     }
+    base_appearance = _body_material_appearance(body)
     for attr_key, side in attr_to_side.items():
-        edge_id = str(edge_values.get(attr_key, "") or "").strip()
-        if not edge_id:
-            continue
-        if edge_id == CUSTOM_TEXT_VALUE:
-            continue
         face = side_faces.get(side)
         if not face:
+            continue
+        edge_id = str(edge_values.get(attr_key, "") or "").strip()
+        if not edge_id or edge_id == CUSTOM_TEXT_VALUE:
+            _apply_face_appearance_or_raise(face, base_appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden")
             continue
         edge_entry = _edge_by_id.get(edge_id)
         if not edge_entry:
