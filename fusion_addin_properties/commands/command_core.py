@@ -121,7 +121,7 @@ _STRINGS = {
         "grain_length": "Längs",
         "grain_width": "Quer",
         "front_face": "Vorderkante (Fläche)",
-        "edges_enabled": "Bekantung und Oberflächen definieren",
+        "edges_enabled": "Oberflächen definieren",
         "edges_section": "Bekantung und Oberflächen",
         "mode": "Modus",
         "mode_none": "Keine",
@@ -166,7 +166,7 @@ _STRINGS = {
         "grain_length": "Length",
         "grain_width": "Width",
         "front_face": "Front edge (face)",
-        "edges_enabled": "Define edge banding and surfaces",
+        "edges_enabled": "Define surfaces",
         "edges_section": "Edge banding and surfaces",
         "mode": "Mode",
         "mode_none": "None",
@@ -442,8 +442,6 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_EDGES_ENABLED:
-                if _is_edges_enabled(inputs) and _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") == "none":
-                    _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "individual")
                 _update_edge_surface_ui(inputs, restore_front_face=False, preview_surface=True)
                 return
 
@@ -1003,9 +1001,13 @@ def _edge_surface_ui_state(inputs):
     checkbox_visible = bool(body and supports_any)
     section_visible = checkbox_visible and _is_edges_enabled(inputs)
     mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-    if section_visible and mode == "none":
-        mode = "individual"
+    if section_visible and supports_surface and not supports_edges:
+        mode = "all"
         _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
+    elif section_visible and mode == "none":
+        mode = "individual" if supports_edges else "all"
+        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
+    mode_visible = section_visible and supports_edges
     return {
         "body": body,
         "entry": entry,
@@ -1014,6 +1016,7 @@ def _edge_surface_ui_state(inputs):
         "checkbox_visible": checkbox_visible,
         "section_visible": section_visible,
         "mode": mode,
+        "mode_visible": mode_visible,
     }
 
 
@@ -1030,13 +1033,14 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
     checkbox_visible = state["checkbox_visible"]
     section_visible = state["section_visible"]
     mode = state["mode"]
+    mode_visible = state["mode_visible"]
     supports_edges = state["supports_edges"]
     supports_surface = state["supports_surface"]
     body = state["body"]
 
     _set_edges_enabled_visible(inputs, checkbox_visible)
     _set_input_visibility(inputs, _INPUT_EDGES_HEADER, section_visible)
-    _set_input_visibility(inputs, _INPUT_EDGE_MODE, section_visible)
+    _set_input_visibility(inputs, _INPUT_EDGE_MODE, mode_visible)
 
     front_visible = section_visible and mode == "individual" and supports_edges
     _set_input_visibility(inputs, _INPUT_FRONT_FACE, front_visible)
