@@ -438,13 +438,9 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_EDGES_ENABLED:
-                body = _read_selected_body(inputs)
                 if _is_edges_enabled(inputs) and _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") == "none":
                     _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "individual")
-                _set_edge_dropdown_enabled_state(inputs, restore_front_face=False)
-                _apply_surface_appearance_preview(inputs)
-                if body:
-                    _set_body_selection(inputs, body)
+                _update_edge_surface_ui(inputs, restore_front_face=False, preview_surface=True)
                 return
 
             if changed.id == _INPUT_FRONT_FACE:
@@ -475,28 +471,22 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
 
             if changed.id == _INPUT_SWAP_SURFACES:
                 _swap_surface_inputs(inputs)
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_surface_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs, preview_surface=True)
                 return
 
             if changed.id == _INPUT_EDGE_MODE:
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
-                _apply_surface_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs, preview_edge=True, preview_surface=True)
                 return
 
             if changed.id == _INPUT_ALL_SURFACE:
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_surface_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs, preview_surface=True)
                 return
 
             if changed.id in (_INPUT_EDGE_ALL, _INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs, preview_edge=True)
                 return
             if changed.id in (_INPUT_TOP_SURFACE, _INPUT_BOTTOM_SURFACE):
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_surface_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs, preview_surface=True)
                 return
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
@@ -1080,6 +1070,19 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
         surface_is_custom = surface_visible and _read_surface_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
         _set_input_visibility(inputs, text_id, surface_is_custom)
     _set_input_visibility(inputs, _INPUT_SWAP_SURFACES, surface_visible)
+
+
+def _update_edge_surface_ui(inputs, restore_front_face=True, preview_edge=False, preview_surface=False):
+    body = _read_selected_body(inputs)
+    try:
+        _render_edge_surface_ui(inputs, restore_front_face=restore_front_face)
+        if preview_edge:
+            _apply_edge_appearance_preview(inputs)
+        if preview_surface:
+            _apply_surface_appearance_preview(inputs)
+    finally:
+        if body:
+            _set_body_selection(inputs, body)
 
 
 def _clear_custom_text_inputs(inputs):
