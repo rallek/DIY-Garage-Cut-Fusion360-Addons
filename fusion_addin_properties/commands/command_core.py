@@ -81,6 +81,7 @@ _INPUT_BOTTOM_SURFACE_TEXT = "diygc_bottom_surface_text"
 _INPUT_SWAP_SURFACES = "diygc_swap_surfaces"
 _INPUT_NOTES_HEADER = "diygc_notes_header"
 _INPUT_NOTES = "diygc_notes"
+_INPUT_APPLY = "diygc_apply"
 
 _handlers = []
 _active_panel_id = None
@@ -149,6 +150,7 @@ _STRINGS = {
         "notes_section": "Fertigungshinweise",
         "surface_none": "(Keine Oberfläche)",
         "notes": "Fertigungshinweise",
+        "apply": "Anwenden",
         "face_prompt": "Planare Seitenfläche wählen",
     },
     "en": {
@@ -194,6 +196,7 @@ _STRINGS = {
         "notes_section": "Production notes",
         "surface_none": "(No surface)",
         "notes": "Production notes",
+        "apply": "Apply",
         "face_prompt": "Select planar side face",
     },
 }
@@ -366,6 +369,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         notes_header.isFullWidth = True
         notes = inputs.addTextBoxCommandInput(_INPUT_NOTES, _t("notes"), "", 4, False)
         notes.isFullWidth = True
+        apply_button = inputs.addBoolValueInput(_INPUT_APPLY, _t("apply"), False, "", False)
+        apply_button.isVisible = False
         _populate_edge_dropdown(edge_all, None)
         _populate_edge_dropdown(edge_front, None)
         _populate_edge_dropdown(edge_back, None)
@@ -490,6 +495,9 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
             if changed.id in (_INPUT_TOP_SURFACE, _INPUT_BOTTOM_SURFACE):
                 _update_edge_surface_ui(inputs, preview_surface=True)
                 return
+            if changed.id == _INPUT_APPLY:
+                _handle_apply_button(inputs)
+                return
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
 
@@ -508,113 +516,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             if not inputs:
                 ui.messageBox("Properties-Fehler: Keine Command-Inputs verfügbar.")
                 return
-
-            body = _read_selected_body(inputs)
-            if not body:
-                ui.messageBox(f"Bitte im Dialog einen {_t('body').lower()} auswählen.")
-                return
-
-            material_id = _read_material_dropdown_value(inputs, raise_on_unknown=True)
-            if not material_id:
-                ui.messageBox(f"Bitte ein {_t('material').lower()} auswählen.")
-                return
-            entry = _material_by_id.get(material_id)
-            if not entry:
-                raise RuntimeError(f"Material '{material_id}' ist nicht im Katalog vorhanden.")
-
-            old_material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
-            _write_body_attribute_or_raise(body, ATTR_KEY_MATERIAL_ID, material_id)
-
-            if entry.supports_trim_allowance:
-                trim_input = _read_string_input(inputs, _INPUT_TRIM_ALLOWANCE, "")
-                trim_allowance_mm = _parse_trim_allowance(trim_input)
-                _write_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM, _format_trim_allowance(trim_allowance_mm))
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
-
-            if _material_requires_grain_direction(entry):
-                grain_direction = _read_grain_direction_dropdown(inputs)
-                _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
-
-            edge_section_enabled = _is_edges_enabled(inputs)
-            edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") if edge_section_enabled else "none"
-            surface_values = {ATTR_KEY_SURFACE_TOP: "", ATTR_KEY_SURFACE_BOTTOM: ""}
-
-            if entry.supports_surface and edge_section_enabled:
-                surface_values = _read_surface_values_for_mode(inputs)
-                _validate_custom_text_values(inputs, surface_values)
-                _write_or_clear_body_attribute(body, ATTR_KEY_SURFACE_TOP, surface_values.get(ATTR_KEY_SURFACE_TOP, ""))
-                _write_or_clear_body_attribute(
-                    body, ATTR_KEY_SURFACE_BOTTOM, surface_values.get(ATTR_KEY_SURFACE_BOTTOM, "")
-                )
-                _write_custom_text_attributes(body, inputs, surface_values)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT)
-
-            notes = _read_string_input(inputs, _INPUT_NOTES, "").strip()
-            _write_or_clear_body_attribute(body, ATTR_KEY_NOTES, notes)
-
-            side_faces = None
-            edge_values = (
-                _read_edge_values_for_mode(inputs, require_material=True)
-                if entry.supports_edges and edge_section_enabled
-                else {}
-            )
-            _validate_custom_text_values(inputs, edge_values)
-            has_edge_values = any(str(value or "").strip() for value in edge_values.values())
-            if entry.supports_edges and edge_mode == "all":
-                _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
-                _write_all_mode_edge_attributes(body, inputs)
-            elif entry.supports_edges and edge_mode == "individual" and has_edge_values:
-                side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
-                if not side_faces:
-                    raise RuntimeError("Für aktivierte Bekantung bitte zuerst eine Vorderkante auswählen.")
-                _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
-                for attr_key, edge_id in edge_values.items():
-                    if edge_id:
-                        _write_body_attribute_or_raise(body, attr_key, edge_id)
-                    else:
-                        _clear_body_attribute_or_raise(body, attr_key)
-                _write_custom_text_attributes(body, inputs, edge_values)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT)
-
-            if material_id != old_material_id:
-                _apply_material_appearance_or_raise(body, material_id)
-
-            if entry.supports_edges and edge_mode == "individual" and side_faces:
-                _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
-            if entry.supports_surface:
-                _apply_surface_appearance_from_body_faces(
-                    body,
-                    surface_values,
-                    include_edges=entry.supports_edges and edge_mode == "all",
-                    allow_missing_empty_faces=not _has_any_surface_value(surface_values),
-                )
-
-            if _is_body_likely_read_only(body):
-                diag = _diagnose_attribute_context(body)
-                ui.messageBox(
-                    "Eigenschaften gespeichert, aber der Body wirkt schreibgeschützt.\n"
-                    "Bitte Ergebnis prüfen.\n\nDiagnose:\n"
-                    f"{diag}"
-                )
-                return
-
-            print(f"Properties gespeichert für Body: {body.name}")
+            _save_properties_from_inputs(inputs, ui)
         except Exception as exc:
             print(f"Properties: Execute-Fehler: {exc}")
             ui.messageBox(f"Eigenschaften fehlgeschlagen:\n{exc}")
@@ -633,6 +535,131 @@ class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
         except Exception as exc:
             print(f"Properties: ValidateInputs-Fehler: {exc}")
             event_args.areInputsValid = False
+
+
+def _handle_apply_button(inputs):
+    app = adsk.core.Application.get()
+    ui = app.userInterface if app else None
+    apply_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_APPLY))
+    if apply_input:
+        apply_input.value = False
+    if not ui:
+        print("Properties: App/UI nicht verfügbar.")
+        return
+    try:
+        body = _save_properties_from_inputs(inputs, ui)
+        if body:
+            _set_body_selection(inputs, body)
+            _refresh_inputs_from_selected_body(inputs)
+    except Exception as exc:
+        print(f"Properties: Anwenden-Fehler: {exc}")
+        ui.messageBox(f"Anwenden fehlgeschlagen:\n{exc}")
+
+
+def _save_properties_from_inputs(inputs, ui):
+    body = _read_selected_body(inputs)
+    if not body:
+        ui.messageBox(f"Bitte im Dialog einen {_t('body').lower()} auswählen.")
+        return None
+
+    material_id = _read_material_dropdown_value(inputs, raise_on_unknown=True)
+    if not material_id:
+        ui.messageBox(f"Bitte ein {_t('material').lower()} auswählen.")
+        return None
+    entry = _material_by_id.get(material_id)
+    if not entry:
+        raise RuntimeError(f"Material '{material_id}' ist nicht im Katalog vorhanden.")
+
+    old_material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
+    _write_body_attribute_or_raise(body, ATTR_KEY_MATERIAL_ID, material_id)
+
+    if entry.supports_trim_allowance:
+        trim_input = _read_string_input(inputs, _INPUT_TRIM_ALLOWANCE, "")
+        trim_allowance_mm = _parse_trim_allowance(trim_input)
+        _write_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM, _format_trim_allowance(trim_allowance_mm))
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
+
+    if _material_requires_grain_direction(entry):
+        grain_direction = _read_grain_direction_dropdown(inputs)
+        _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
+
+    edge_section_enabled = _is_edges_enabled(inputs)
+    edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") if edge_section_enabled else "none"
+    surface_values = {ATTR_KEY_SURFACE_TOP: "", ATTR_KEY_SURFACE_BOTTOM: ""}
+
+    if entry.supports_surface and edge_section_enabled:
+        surface_values = _read_surface_values_for_mode(inputs)
+        _validate_custom_text_values(inputs, surface_values)
+        _write_or_clear_body_attribute(body, ATTR_KEY_SURFACE_TOP, surface_values.get(ATTR_KEY_SURFACE_TOP, ""))
+        _write_or_clear_body_attribute(body, ATTR_KEY_SURFACE_BOTTOM, surface_values.get(ATTR_KEY_SURFACE_BOTTOM, ""))
+        _write_custom_text_attributes(body, inputs, surface_values)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT)
+
+    notes = _read_string_input(inputs, _INPUT_NOTES, "").strip()
+    _write_or_clear_body_attribute(body, ATTR_KEY_NOTES, notes)
+
+    side_faces = None
+    edge_values = (
+        _read_edge_values_for_mode(inputs, require_material=True) if entry.supports_edges and edge_section_enabled else {}
+    )
+    _validate_custom_text_values(inputs, edge_values)
+    has_edge_values = any(str(value or "").strip() for value in edge_values.values())
+    if entry.supports_edges and edge_mode == "all":
+        _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
+        _write_all_mode_edge_attributes(body, inputs)
+    elif entry.supports_edges and edge_mode == "individual" and has_edge_values:
+        side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
+        if not side_faces:
+            raise RuntimeError("Für aktivierte Bekantung bitte zuerst eine Vorderkante auswählen.")
+        _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
+        for attr_key, edge_id in edge_values.items():
+            if edge_id:
+                _write_body_attribute_or_raise(body, attr_key, edge_id)
+            else:
+                _clear_body_attribute_or_raise(body, attr_key)
+        _write_custom_text_attributes(body, inputs, edge_values)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT)
+
+    if material_id != old_material_id:
+        _apply_material_appearance_or_raise(body, material_id)
+
+    if entry.supports_edges and edge_mode == "individual" and side_faces:
+        _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
+    if entry.supports_surface:
+        _apply_surface_appearance_from_body_faces(
+            body,
+            surface_values,
+            include_edges=entry.supports_edges and edge_mode == "all",
+            allow_missing_empty_faces=not _has_any_surface_value(surface_values),
+        )
+
+    if _is_body_likely_read_only(body):
+        diag = _diagnose_attribute_context(body)
+        ui.messageBox(
+            "Eigenschaften gespeichert, aber der Body wirkt schreibgeschützt.\n"
+            "Bitte Ergebnis prüfen.\n\nDiagnose:\n"
+            f"{diag}"
+        )
+        return body
+
+    print(f"Properties gespeichert für Body: {body.name}")
+    return body
 
 
 def _load_material_entries():
@@ -961,7 +988,7 @@ def _set_edge_controls_visible(inputs, visible):
 
 
 def _set_notes_controls_visible(inputs, visible):
-    for input_id in (_INPUT_NOTES_HEADER, _INPUT_NOTES):
+    for input_id in (_INPUT_NOTES_HEADER, _INPUT_NOTES, _INPUT_APPLY):
         item = inputs.itemById(input_id)
         if item:
             item.isVisible = bool(visible)
