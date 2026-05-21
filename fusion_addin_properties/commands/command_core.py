@@ -297,13 +297,6 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         grain_pick.isVisible = False
         edges_enabled = inputs.addBoolValueInput(_INPUT_EDGES_ENABLED, _t("edges_enabled"), True, "", False)
         edges_enabled.isVisible = False
-        front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
-        front_face.addSelectionFilter("PlanarFaces")
-        front_face.setSelectionLimits(0, 1)
-        try:
-            front_face.isUseCurrentSelections = False
-        except Exception:
-            pass
 
         edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGES_HEADER, "", _t("edges_section"), 1, True)
         edges_header.isFullWidth = True
@@ -312,6 +305,13 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _INPUT_EDGE_MODE, _t("mode"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
         _populate_mode_dropdown(edge_mode, "individual")
+        front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
+        front_face.addSelectionFilter("PlanarFaces")
+        front_face.setSelectionLimits(0, 1)
+        try:
+            front_face.isUseCurrentSelections = False
+        except Exception:
+            pass
         edge_all = inputs.addDropDownCommandInput(
             _INPUT_EDGE_ALL, _t("edge_all"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
@@ -914,7 +914,6 @@ def _set_main_controls_visible(inputs, visible):
         _INPUT_TRIM_ALLOWANCE,
         _INPUT_GRAIN_DIRECTION,
         _INPUT_EDGES_ENABLED,
-        _INPUT_FRONT_FACE,
     )
     for input_id in main_ids:
         item = inputs.itemById(input_id)
@@ -995,6 +994,94 @@ def _set_edges_enabled_visible(inputs, visible):
         item.isEnabled = bool(visible)
 
 
+def _selected_material_entry(inputs):
+    material_id = _read_material_dropdown_value(inputs, raise_on_unknown=False)
+    return _material_by_id.get(material_id or "")
+
+
+def _edge_surface_ui_state(inputs):
+    body = _read_selected_body(inputs)
+    entry = _selected_material_entry(inputs)
+    supports_edges = bool(entry and entry.supports_edges)
+    supports_surface = bool(entry and entry.supports_surface)
+    supports_any = supports_edges or supports_surface
+    checkbox_visible = bool(body and supports_any)
+    section_visible = checkbox_visible and _is_edges_enabled(inputs)
+    mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+    if section_visible and mode == "none":
+        mode = "individual"
+        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
+    return {
+        "body": body,
+        "entry": entry,
+        "supports_edges": supports_edges,
+        "supports_surface": supports_surface,
+        "checkbox_visible": checkbox_visible,
+        "section_visible": section_visible,
+        "mode": mode,
+    }
+
+
+def _set_input_visibility(inputs, input_id, visible, enabled=None):
+    item = inputs.itemById(input_id)
+    if not item:
+        return
+    item.isVisible = bool(visible)
+    item.isEnabled = bool(visible if enabled is None else enabled)
+
+
+def _render_edge_surface_ui(inputs, restore_front_face=True):
+    state = _edge_surface_ui_state(inputs)
+    checkbox_visible = state["checkbox_visible"]
+    section_visible = state["section_visible"]
+    mode = state["mode"]
+    supports_edges = state["supports_edges"]
+    supports_surface = state["supports_surface"]
+    body = state["body"]
+
+    _set_edges_enabled_visible(inputs, checkbox_visible)
+    _set_input_visibility(inputs, _INPUT_EDGES_HEADER, section_visible)
+    _set_input_visibility(inputs, _INPUT_EDGE_MODE, section_visible)
+
+    front_visible = section_visible and mode == "individual" and supports_edges
+    _set_input_visibility(inputs, _INPUT_FRONT_FACE, front_visible)
+    if restore_front_face and front_visible and body:
+        _selected_or_restored_front_face(inputs, body)
+
+    _set_input_visibility(inputs, _INPUT_EDGE_ALL, False)
+    _set_input_visibility(inputs, _INPUT_SURFACE_ALL_TEXT, False)
+
+    all_surface_visible = section_visible and mode == "all" and supports_surface
+    _set_input_visibility(inputs, _INPUT_ALL_SURFACE, all_surface_visible)
+    all_surface_is_custom = all_surface_visible and _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE) == CUSTOM_TEXT_VALUE
+    _set_input_visibility(inputs, _INPUT_ALL_SURFACE_TEXT, all_surface_is_custom)
+
+    edge_visible = section_visible and mode == "individual" and supports_edges
+    for enabled_id, dropdown_id, text_id in (
+        (_INPUT_EDGE_FRONT_ENABLED, _INPUT_EDGE_FRONT, _INPUT_EDGE_FRONT_TEXT),
+        (_INPUT_EDGE_BACK_ENABLED, _INPUT_EDGE_BACK, _INPUT_EDGE_BACK_TEXT),
+        (_INPUT_EDGE_LEFT_ENABLED, _INPUT_EDGE_LEFT, _INPUT_EDGE_LEFT_TEXT),
+        (_INPUT_EDGE_RIGHT_ENABLED, _INPUT_EDGE_RIGHT, _INPUT_EDGE_RIGHT_TEXT),
+    ):
+        _set_input_visibility(inputs, enabled_id, False)
+        _set_edge_enabled(inputs, enabled_id, bool(_read_edge_dropdown_value(inputs, dropdown_id)))
+        _set_input_visibility(inputs, dropdown_id, edge_visible)
+        edge_is_custom = edge_visible and _read_edge_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
+        _set_input_visibility(inputs, text_id, edge_is_custom)
+
+    surface_visible = section_visible and mode == "individual" and supports_surface
+    for enabled_id, dropdown_id, text_id in (
+        (_INPUT_TOP_ENABLED, _INPUT_TOP_SURFACE, _INPUT_TOP_SURFACE_TEXT),
+        (_INPUT_BOTTOM_ENABLED, _INPUT_BOTTOM_SURFACE, _INPUT_BOTTOM_SURFACE_TEXT),
+    ):
+        _set_input_visibility(inputs, enabled_id, False)
+        _set_edge_enabled(inputs, enabled_id, bool(_read_surface_dropdown_value(inputs, dropdown_id)))
+        _set_input_visibility(inputs, dropdown_id, surface_visible)
+        surface_is_custom = surface_visible and _read_surface_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
+        _set_input_visibility(inputs, text_id, surface_is_custom)
+    _set_input_visibility(inputs, _INPUT_SWAP_SURFACES, surface_visible)
+
+
 def _clear_custom_text_inputs(inputs):
     for input_id in (
         _INPUT_EDGE_FRONT_TEXT,
@@ -1009,18 +1096,7 @@ def _clear_custom_text_inputs(inputs):
 
 
 def _set_edge_controls_for_material(inputs, material_id):
-    entry = _material_by_id.get(material_id or "")
-    visible = bool(entry and (entry.supports_edges or entry.supports_surface) and _is_edges_enabled(inputs))
-    _set_edge_controls_visible(inputs, visible)
-    front_face = _front_face_selection_input(inputs)
-    if front_face:
-        front_face.isVisible = False
-        front_face.isEnabled = False
-    if not visible:
-        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-    elif _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") == "none":
-        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "individual")
-    _set_edge_dropdown_enabled_state(inputs)
+    _render_edge_surface_ui(inputs)
 
 
 def _front_face_selection_input(inputs):
@@ -1372,98 +1448,7 @@ def _set_edge_enabled(inputs, enabled_input_id, enabled):
 
 
 def _set_edge_dropdown_enabled_state(inputs, restore_front_face=True):
-    header = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_EDGES_HEADER))
-    section_visible = bool(header and header.isVisible)
-    edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-    body = _read_selected_body(inputs)
-    edges_enabled = _is_edges_enabled(inputs)
-    material_id = _read_material_dropdown_value(inputs, raise_on_unknown=False)
-    entry = _material_by_id.get(material_id or "")
-    supports_edges = bool(entry and entry.supports_edges)
-    supports_surface = bool(entry and entry.supports_surface)
-    front_face = _front_face_selection_input(inputs)
-    if front_face:
-        show_front = section_visible and edges_enabled and edge_mode == "individual" and supports_edges
-        front_face.isVisible = show_front
-        front_face.isEnabled = show_front
-        if restore_front_face and show_front and body:
-            _selected_or_restored_front_face(inputs, body)
-
-    edge_all = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_EDGE_ALL))
-    if edge_all:
-        edge_all.isVisible = False
-        edge_all.isEnabled = False
-    all_surface = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_ALL_SURFACE))
-    all_surface_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_ALL_SURFACE_TEXT))
-    all_visible = section_visible and edges_enabled and edge_mode == "all" and supports_surface
-    if all_surface:
-        all_surface.isVisible = all_visible
-        all_surface.isEnabled = all_visible
-    if all_surface_text:
-        is_custom = _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE) == CUSTOM_TEXT_VALUE
-        all_surface_text.isVisible = all_visible and is_custom
-        all_surface_text.isEnabled = all_visible and is_custom
-
-    mapping = {
-        _INPUT_EDGE_FRONT_ENABLED: (_INPUT_EDGE_FRONT, _INPUT_EDGE_FRONT_TEXT),
-        _INPUT_EDGE_BACK_ENABLED: (_INPUT_EDGE_BACK, _INPUT_EDGE_BACK_TEXT),
-        _INPUT_EDGE_LEFT_ENABLED: (_INPUT_EDGE_LEFT, _INPUT_EDGE_LEFT_TEXT),
-        _INPUT_EDGE_RIGHT_ENABLED: (_INPUT_EDGE_RIGHT, _INPUT_EDGE_RIGHT_TEXT),
-    }
-    for enabled_id, (dropdown_id, text_id) in mapping.items():
-        enabled_item = _edge_enabled_input(inputs, enabled_id)
-        dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(dropdown_id))
-        text_input = adsk.core.StringValueCommandInput.cast(inputs.itemById(text_id))
-        is_visible = section_visible and edges_enabled and edge_mode == "individual" and supports_edges
-        if enabled_item:
-            enabled_item.isVisible = False
-            enabled_item.isEnabled = False
-            enabled_item.value = bool(_read_edge_dropdown_value(inputs, dropdown_id))
-        if dropdown:
-            dropdown.isVisible = is_visible
-            dropdown.isEnabled = is_visible
-        if text_input:
-            is_custom = _read_edge_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
-            text_input.isVisible = is_visible and is_custom
-            text_input.isEnabled = is_visible and is_custom
-
-    surface_all = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_SURFACE_ALL_TEXT))
-    if surface_all:
-        surface_all.isVisible = False
-        surface_all.isEnabled = False
-    top_enabled = _edge_enabled_input(inputs, _INPUT_TOP_ENABLED)
-    top_surface = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_TOP_SURFACE))
-    top_surface_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_TOP_SURFACE_TEXT))
-    bottom_enabled = _edge_enabled_input(inputs, _INPUT_BOTTOM_ENABLED)
-    bottom_surface = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_BOTTOM_SURFACE))
-    bottom_surface_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_BOTTOM_SURFACE_TEXT))
-    swap_surfaces = adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_SWAP_SURFACES))
-    surface_visible = section_visible and edges_enabled and edge_mode == "individual" and supports_surface
-    if top_enabled:
-        top_enabled.isVisible = False
-        top_enabled.isEnabled = False
-        top_enabled.value = bool(_read_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE))
-    if top_surface:
-        top_surface.isVisible = surface_visible
-        top_surface.isEnabled = surface_visible
-    if top_surface_text:
-        is_custom = _read_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE) == CUSTOM_TEXT_VALUE
-        top_surface_text.isVisible = surface_visible and is_custom
-        top_surface_text.isEnabled = surface_visible and is_custom
-    if bottom_enabled:
-        bottom_enabled.isVisible = False
-        bottom_enabled.isEnabled = False
-        bottom_enabled.value = bool(_read_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE))
-    if bottom_surface:
-        bottom_surface.isVisible = surface_visible
-        bottom_surface.isEnabled = surface_visible
-    if bottom_surface_text:
-        is_custom = _read_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE) == CUSTOM_TEXT_VALUE
-        bottom_surface_text.isVisible = surface_visible and is_custom
-        bottom_surface_text.isEnabled = surface_visible and is_custom
-    if swap_surfaces:
-        swap_surfaces.isVisible = surface_visible
-        swap_surfaces.isEnabled = surface_visible
+    _render_edge_surface_ui(inputs, restore_front_face=restore_front_face)
 
 
 def _set_filter_dropdown_value(inputs, type_id):
