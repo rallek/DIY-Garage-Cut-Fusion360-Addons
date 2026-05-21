@@ -438,10 +438,13 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_EDGES_ENABLED:
+                body = _read_selected_body(inputs)
                 if _is_edges_enabled(inputs) and _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") == "none":
                     _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "individual")
-                _set_edge_dropdown_enabled_state(inputs)
+                _set_edge_dropdown_enabled_state(inputs, restore_front_face=False)
                 _apply_surface_appearance_preview(inputs)
+                if body:
+                    _set_body_selection(inputs, body)
                 return
 
             if changed.id == _INPUT_FRONT_FACE:
@@ -1368,7 +1371,7 @@ def _set_edge_enabled(inputs, enabled_input_id, enabled):
         item.value = bool(enabled)
 
 
-def _set_edge_dropdown_enabled_state(inputs):
+def _set_edge_dropdown_enabled_state(inputs, restore_front_face=True):
     header = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_EDGES_HEADER))
     section_visible = bool(header and header.isVisible)
     edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
@@ -1383,7 +1386,7 @@ def _set_edge_dropdown_enabled_state(inputs):
         show_front = section_visible and edges_enabled and edge_mode == "individual" and supports_edges
         front_face.isVisible = show_front
         front_face.isEnabled = show_front
-        if show_front and body:
+        if restore_front_face and show_front and body:
             _selected_or_restored_front_face(inputs, body)
 
     edge_all = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_EDGE_ALL))
