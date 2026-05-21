@@ -453,7 +453,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     _set_edge_controls_visible(inputs, False)
                     return
                 _validate_front_face_selection(inputs, body)
-                _sync_edge_controls_from_body_attributes(inputs, body)
+                _sync_edge_controls_from_body_attributes(inputs, body, preserve_current_mode=True)
                 _set_edge_dropdown_enabled_state(inputs)
                 _apply_edge_appearance_preview(inputs)
                 return
@@ -1049,6 +1049,7 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
     _set_input_visibility(inputs, _INPUT_FRONT_FACE, front_visible)
     if restore_front_face and front_visible and body:
         _selected_or_restored_front_face(inputs, body)
+    front_ready = bool(_selected_front_face(inputs)) if front_visible else False
 
     _set_input_visibility(inputs, _INPUT_EDGE_ALL, False)
     _set_input_visibility(inputs, _INPUT_SURFACE_ALL_TEXT, False)
@@ -1058,7 +1059,7 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
     all_surface_is_custom = all_surface_visible and _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE) == CUSTOM_TEXT_VALUE
     _set_input_visibility(inputs, _INPUT_ALL_SURFACE_TEXT, all_surface_is_custom)
 
-    edge_visible = section_visible and mode == "individual" and supports_edges
+    edge_visible = section_visible and mode == "individual" and supports_edges and front_ready
     for enabled_id, dropdown_id, text_id in (
         (_INPUT_EDGE_FRONT_ENABLED, _INPUT_EDGE_FRONT, _INPUT_EDGE_FRONT_TEXT),
         (_INPUT_EDGE_BACK_ENABLED, _INPUT_EDGE_BACK, _INPUT_EDGE_BACK_TEXT),
@@ -1071,7 +1072,9 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
         edge_is_custom = edge_visible and _read_edge_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
         _set_input_visibility(inputs, text_id, edge_is_custom)
 
-    surface_visible = section_visible and mode == "individual" and supports_surface
+    surface_visible = section_visible and mode == "individual" and supports_surface and (
+        not supports_edges or front_ready
+    )
     for enabled_id, dropdown_id, text_id in (
         (_INPUT_TOP_ENABLED, _INPUT_TOP_SURFACE, _INPUT_TOP_SURFACE_TEXT),
         (_INPUT_BOTTOM_ENABLED, _INPUT_BOTTOM_SURFACE, _INPUT_BOTTOM_SURFACE_TEXT),
@@ -1617,7 +1620,7 @@ def _has_any_edge_attribute(body):
     return False
 
 
-def _sync_edge_controls_from_body_attributes(inputs, body):
+def _sync_edge_controls_from_body_attributes(inputs, body, preserve_current_mode=False):
     edge_values_by_attr = {
         ATTR_KEY_EDGE_FRONT: str(_get_attr(body, ATTR_KEY_EDGE_FRONT, "") or "").strip(),
         ATTR_KEY_EDGE_BACK: str(_get_attr(body, ATTR_KEY_EDGE_BACK, "") or "").strip(),
@@ -1657,6 +1660,10 @@ def _sync_edge_controls_from_body_attributes(inputs, body):
         mode = "individual"
     else:
         mode = "individual"
+    if preserve_current_mode:
+        current_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+        if current_mode in ("all", "individual"):
+            mode = current_mode
     _set_edges_enabled_value(inputs, bool(any_edge_data or any_surface_data))
 
     _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
