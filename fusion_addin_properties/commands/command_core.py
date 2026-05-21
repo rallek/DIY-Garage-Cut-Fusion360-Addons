@@ -1721,19 +1721,19 @@ def _custom_text_attr_mapping():
 
 def _apply_surface_appearance_from_body_faces(body, surface_values):
     face_map = _detect_top_bottom_faces(body)
+    base_appearance = _body_material_appearance(body)
     mapping = {
         ATTR_KEY_SURFACE_TOP: "top",
         ATTR_KEY_SURFACE_BOTTOM: "bottom",
     }
     for attr_key, face_key in mapping.items():
         surface_id = str(surface_values.get(attr_key, "") or "").strip()
-        if not surface_id:
-            continue
-        if surface_id == CUSTOM_TEXT_VALUE:
-            continue
         face = face_map.get(face_key)
         if not face:
             raise RuntimeError(f"Fläche für Oberfläche '{face_key}' konnte nicht bestimmt werden.")
+        if not surface_id or surface_id == CUSTOM_TEXT_VALUE:
+            _apply_face_appearance_or_raise(face, base_appearance, "Oberflächen-Appearance konnte nicht zurückgesetzt werden")
+            continue
         surface_entry = _surface_by_id.get(surface_id)
         if not surface_entry:
             raise RuntimeError(f"Oberfläche '{surface_id}' ist nicht im Katalog vorhanden.")
@@ -1742,10 +1742,31 @@ def _apply_surface_appearance_from_body_faces(body, surface_values):
             raise RuntimeError(
                 f"Appearance '{surface_entry.appearance_name}' aus Oberfläche '{surface_id}' wurde nicht gefunden."
             )
-        try:
-            face.appearance = appearance
-        except Exception as exc:
-            raise RuntimeError(f"Oberflächen-Appearance konnte nicht gesetzt werden: {exc}") from exc
+        _apply_face_appearance_or_raise(face, appearance, "Oberflächen-Appearance konnte nicht gesetzt werden")
+
+
+def _body_material_appearance(body):
+    material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
+    entry = _material_by_id.get(material_id)
+    if entry and entry.appearance_name:
+        appearance = _find_appearance_by_name(entry.appearance_name)
+        if appearance:
+            return appearance
+    try:
+        target = _resolve_attr_target(body)
+        appearance = getattr(target, "appearance", None) if target else None
+        if appearance:
+            return appearance
+    except Exception:
+        pass
+    raise RuntimeError("Material-Appearance zum Zurücksetzen der Oberfläche wurde nicht gefunden.")
+
+
+def _apply_face_appearance_or_raise(face, appearance, error_prefix):
+    try:
+        face.appearance = appearance
+    except Exception as exc:
+        raise RuntimeError(f"{error_prefix}: {exc}") from exc
 
 
 def _detect_top_bottom_faces(body):
