@@ -99,6 +99,8 @@ _surface_by_id = {}
 _surface_label_to_id = {}
 _surface_id_to_label = {}
 _body_token = ""
+_body_ref = None
+_body_selection_ref = None
 _front_face_token = ""
 _front_body_token = ""
 _ui_lang = "de"
@@ -1085,7 +1087,7 @@ def _update_edge_surface_ui(inputs, restore_front_face=True, preview_edge=False,
             _apply_surface_appearance_preview(inputs)
     finally:
         if body:
-            _set_body_selection(inputs, body)
+            _restore_body_selection_from_memory(inputs)
 
 
 def _clear_custom_text_inputs(inputs):
@@ -1197,13 +1199,17 @@ def _set_body_selection(inputs, body):
 
 
 def _clear_body_selection_memory():
-    global _body_token
+    global _body_token, _body_ref, _body_selection_ref
     _body_token = ""
+    _body_ref = None
+    _body_selection_ref = None
 
 
-def _remember_body_selection(body):
-    global _body_token
+def _remember_body_selection(body, selection_entity=None):
+    global _body_token, _body_ref, _body_selection_ref
     _body_token = _get_entity_token(body) or ""
+    _body_ref = body
+    _body_selection_ref = selection_entity or body
 
 
 def _clear_front_face_memory():
@@ -1239,6 +1245,9 @@ def _get_or_derive_front_face(inputs, body):
 
 
 def _restore_body_selection_from_memory(inputs):
+    if _body_ref:
+        _set_body_selection(inputs, _body_selection_ref or _body_ref)
+        return _body_ref
     if not _body_token:
         return None
     app = adsk.core.Application.get()
@@ -2374,11 +2383,15 @@ def _apply_material_appearance_or_raise(body, material_id):
 
 def _read_selected_body(inputs):
     try:
-        body = _selected_body_from_input(inputs)
+        body_entity = _selection_entity_by_input_id(inputs, _INPUT_BODY)
+        body = adsk.fusion.BRepBody.cast(body_entity)
         if not body:
             return _restore_body_selection_from_memory(inputs)
-        _remember_body_selection(body)
-        return body
+
+        native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
+        resolved = native if native else body
+        _remember_body_selection(resolved, body)
+        return resolved
     except Exception as exc:
         print(f"Properties: Körperauswahl konnte nicht gelesen werden: {exc}")
     return None
