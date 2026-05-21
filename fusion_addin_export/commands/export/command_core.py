@@ -18,7 +18,14 @@ _ATTR_KEY_EDGE_LEFT = "edge_left"
 _ATTR_KEY_EDGE_RIGHT = "edge_right"
 _ATTR_KEY_SURFACE_TOP = "surface_top"
 _ATTR_KEY_SURFACE_BOTTOM = "surface_bottom"
+_ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT = "edge_front_custom_text"
+_ATTR_KEY_EDGE_BACK_CUSTOM_TEXT = "edge_back_custom_text"
+_ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT = "edge_left_custom_text"
+_ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT = "edge_right_custom_text"
+_ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT = "surface_top_custom_text"
+_ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT = "surface_bottom_custom_text"
 _ATTR_KEY_NOTES = "notes"
+_CUSTOM_TEXT_VALUE = "__text__"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 _TYPE_FIELD_EDGE_THICKNESS = "edge_thickness"
@@ -439,6 +446,14 @@ def _resolve_edge_export_for_side(body, catalog, attr_key):
 
     if not edge_id:
         return ("", "", "")
+    if edge_id == _CUSTOM_TEXT_VALUE:
+        custom_text = _resolve_text_attribute_for_export(body, _custom_text_attr_for_attr(attr_key))
+        if not custom_text:
+            raise ValueError(
+                f"Body '{_safe_body_name(body)}' nutzt Freitext-Kante '{attr_key}', "
+                "aber der Freitext fehlt."
+            )
+        return (_CUSTOM_TEXT_VALUE, custom_text, _fmt_mm(0.0))
 
     edge_item = catalog.get(edge_id)
     if not edge_item:
@@ -475,6 +490,14 @@ def _resolve_surface_export_for_side(body, catalog, attr_key):
     surface_id = _resolve_text_attribute_for_export(body, attr_key)
     if not surface_id:
         return ""
+    if surface_id == _CUSTOM_TEXT_VALUE:
+        custom_text = _resolve_text_attribute_for_export(body, _custom_text_attr_for_attr(attr_key))
+        if not custom_text:
+            raise ValueError(
+                f"Body '{_safe_body_name(body)}' nutzt Freitext-Oberfläche '{attr_key}', "
+                "aber der Freitext fehlt."
+            )
+        return custom_text
     surface_item = catalog.get(surface_id)
     if not surface_item:
         raise ValueError(
@@ -487,6 +510,18 @@ def _resolve_surface_export_for_side(body, catalog, attr_key):
             "aber der Katalogeintrag ist nicht vom Typ 'surface'."
         )
     return str(surface_item.name or "").strip()
+
+
+def _custom_text_attr_for_attr(attr_key):
+    mapping = {
+        _ATTR_KEY_EDGE_FRONT: _ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_BACK: _ATTR_KEY_EDGE_BACK_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_LEFT: _ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_RIGHT: _ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT,
+        _ATTR_KEY_SURFACE_TOP: _ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT,
+        _ATTR_KEY_SURFACE_BOTTOM: _ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT,
+    }
+    return mapping.get(attr_key, "")
 
 
 def _extract_edge_thickness(catalog_item):

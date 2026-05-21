@@ -95,6 +95,12 @@ edge_left
 edge_right
 surface_top
 surface_bottom
+edge_front_custom_text
+edge_back_custom_text
+edge_left_custom_text
+edge_right_custom_text
+surface_top_custom_text
+surface_bottom_custom_text
 
 notes
 
@@ -194,6 +200,8 @@ notes
 ## Oberflächen und Fertigungshinweise
 
 `surface_top` und `surface_bottom` verweisen auf Katalogeinträge vom Typ `surface`.
+
+Für Kanten und Oberflächen kann statt eines Katalogeintrags der Sonderwert `__text__` gespeichert werden. Dann muss das zugehörige `*_custom_text`-Attribut gefüllt sein. Beim CSV-Export wird dieser Freitext als Name ausgegeben. Bei Kanten ist die exportierte Dicke in diesem Fall `0`.
 
 `notes` ist ein separater freier Fertigungshinweis und gehört nicht zur strukturierten Oberflächenauswahl.
 

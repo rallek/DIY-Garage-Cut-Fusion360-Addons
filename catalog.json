@@ -156,11 +156,30 @@
     {
       "id": "surface.gelb",
       "type": "surface",
-      "name": "Gelb",
+      "name": "Farbe Gelb",
       "appearance": "Farbe Gelb",
       "appearance_resolved_name": "Farbe Gelb",
       "appearance_id": "3053DEF4-565C-4657-810F-823B0FC7CED1",
-      "appearance_has_texture": false
+      "appearance_has_texture": true,
+      "appearance_texture_other": "paper_base.png",
+      "appearance_texture_preview": "paper_base.png",
+      "preview_texture": "paper_base.png"
+    },
+    {
+      "id": "sheet.tischlerplatte",
+      "type": "sheet",
+      "name": "Tischlerplatte",
+      "appearance": "Kiefer",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "yes",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "Kiefer",
+      "appearance_id": "Prism-148",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_pine_color.jpg",
+      "appearance_texture_preview": "wood_pine_color.jpg",
+      "appearance_texture_color": "wood_pine_bump.jpg",
+      "preview_texture": "wood_pine_color.jpg"
     }
   ]
 }
