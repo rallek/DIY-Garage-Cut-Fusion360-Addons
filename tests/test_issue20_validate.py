@@ -29,6 +29,18 @@ class _Design:
         return value
 
 
+class _Occurrence:
+    @staticmethod
+    def cast(value):
+        return value if hasattr(value, "childOccurrences") else None
+
+
+class _Component:
+    @staticmethod
+    def cast(value):
+        return value if hasattr(value, "occurrences") and not hasattr(value, "childOccurrences") else None
+
+
 class _EventHandler:
     pass
 
@@ -36,7 +48,11 @@ class _EventHandler:
 adsk_core.Application = _Application
 adsk_core.CommandCreatedEventHandler = _EventHandler
 adsk_core.CommandEventHandler = _EventHandler
+adsk_core.InputChangedEventHandler = _EventHandler
+adsk_core.ValidateInputsEventHandler = _EventHandler
 adsk_fusion.Design = _Design
+adsk_fusion.Occurrence = _Occurrence
+adsk_fusion.Component = _Component
 adsk_module.core = adsk_core
 adsk_module.fusion = adsk_fusion
 sys.modules.setdefault("adsk", adsk_module)
@@ -94,6 +110,33 @@ class _FakeBody:
         self.isVisible = True
         self.entityToken = f"token-{name}"
         self.attributes = _FakeAttributes(attrs)
+
+
+class _FakeComponent:
+    def __init__(self, name, bodies=None, occurrences=None):
+        self.name = name
+        self.bRepBodies = list(bodies or [])
+        self.occurrences = list(occurrences or [])
+
+
+class _FakeOccurrence:
+    def __init__(self, name, bodies=None, child_occurrences=None, assembly_context=None):
+        self.name = name
+        self.bRepBodies = list(bodies or [])
+        self.childOccurrences = list(child_occurrences or [])
+        self.assemblyContext = assembly_context
+
+
+class _FakeDesign:
+    def __init__(self, root_component, active_component=None, active_occurrence=None):
+        self.rootComponent = root_component
+        self.activeComponent = active_component
+        self.activeOccurrence = active_occurrence
+
+
+class _FakeApp:
+    def __init__(self, design):
+        self.activeProduct = design
 
 
 class _FakeCatalogItem:
@@ -194,6 +237,62 @@ class Issue20ValidateTests(unittest.TestCase):
 
         self.assertEqual(result.issue_count, 1)
         self.assertIn("exportrelevantes Katalogfeld", "\n".join(result.issues_by_body[0][1]))
+
+    def test_selected_component_scope_ignores_bodies_outside_scope(self):
+        root_body = _body("root", material_id="missing")
+        selected_body = _body("selected", material_id="sheet.white", trim_allowance_mm="1.0")
+        outside_body = _body("outside", material_id="missing")
+        selected_occurrence = _FakeOccurrence("Selected", [selected_body])
+        outside_occurrence = _FakeOccurrence("Outside", [outside_body])
+        root = _FakeComponent("Root", [root_body], [selected_occurrence, outside_occurrence])
+        app = _FakeApp(_FakeDesign(root))
+        scope = validate_core._BodyScope(
+            validate_core.SCOPE_SELECTED_COMPONENTS,
+            [selected_occurrence],
+        )
+
+        targets = validate_core._collect_visible_bodies(app, scope)
+        result = validate_core._analyze_bodies(targets, _FakeCatalog([_sheet_item()]), scope)
+
+        self.assertEqual([target.body.name for target in targets], ["selected"])
+        self.assertEqual(result.ready_count, 1)
+        self.assertEqual(result.issue_count, 0)
+        self.assertEqual(result.scope_label, "Ausgewählte Komponente(n): Selected")
+
+    def test_active_component_scope_includes_child_occurrences_only(self):
+        active_body = _body("active", material_id="sheet.white", trim_allowance_mm="1.0")
+        child_body = _body("child", material_id="sheet.white", trim_allowance_mm="1.0")
+        outside_body = _body("outside", material_id="missing")
+        active = _FakeComponent("Active", [active_body], [_FakeOccurrence("Child", [child_body])])
+        root = _FakeComponent("Root", [], [_FakeOccurrence("Outside", [outside_body])])
+        app = _FakeApp(_FakeDesign(root, active_component=active))
+        scope = validate_core._BodyScope(validate_core.SCOPE_ACTIVE_COMPONENT)
+
+        targets = validate_core._collect_visible_bodies(app, scope)
+        result = validate_core._analyze_bodies(targets, _FakeCatalog([_sheet_item()]), scope)
+
+        self.assertEqual([target.body.name for target in targets], ["active", "child"])
+        self.assertEqual(result.ready_count, 2)
+        self.assertEqual(result.issue_count, 0)
+        self.assertEqual(result.scope_label, "Aktive Komponente: Active")
+
+    def test_excluded_body_inside_scope_counts_as_excluded_not_issue(self):
+        selected_body = _body("selected", exclude_from_export="true")
+        outside_body = _body("outside", material_id="missing")
+        selected_occurrence = _FakeOccurrence("Selected", [selected_body])
+        root = _FakeComponent("Root", [], [selected_occurrence, _FakeOccurrence("Outside", [outside_body])])
+        app = _FakeApp(_FakeDesign(root))
+        scope = validate_core._BodyScope(
+            validate_core.SCOPE_SELECTED_COMPONENTS,
+            [selected_occurrence],
+        )
+
+        targets = validate_core._collect_visible_bodies(app, scope)
+        result = validate_core._analyze_bodies(targets, _FakeCatalog([]), scope)
+
+        self.assertEqual(result.excluded_count, 1)
+        self.assertEqual(result.issue_count, 0)
+        self.assertEqual(result.ready_count, 0)
 
 
 def _body(name, **attrs):

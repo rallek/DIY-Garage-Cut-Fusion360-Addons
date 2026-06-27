@@ -23,6 +23,10 @@ _ATTR_LABELS = {
     export_core._ATTR_KEY_TRIM_ALLOWANCE_MM: "Fraeszulage",
 }
 
+SCOPE_ALL_VISIBLE = "all_visible"
+SCOPE_ACTIVE_COMPONENT = "active_component"
+SCOPE_SELECTED_COMPONENTS = "selected_components"
+
 
 class _BodyAnalysisTarget:
     def __init__(self, body, component_path):
@@ -30,38 +34,85 @@ class _BodyAnalysisTarget:
         self.display_name = _build_body_display_name(body, component_path)
 
 
+class _BodyScope:
+    def __init__(self, mode=SCOPE_ALL_VISIBLE, selected_entities=None, label=None):
+        self.mode = mode if mode in _scope_modes() else SCOPE_ALL_VISIBLE
+        self.selected_entities = list(selected_entities or [])
+        self.label = label or _scope_label(self.mode, self.selected_entities)
+
+
 class _AnalysisResult:
-    def __init__(self):
+    def __init__(self, scope_label=None):
         self.ready_count = 0
         self.excluded_count = 0
         self.issues_by_body = []
         self.ready_bodies = []
+        self.scope_label = scope_label or _scope_label(SCOPE_ALL_VISIBLE)
 
     @property
     def issue_count(self):
         return len(self.issues_by_body)
 
 
-def analyze_visible_bodies(app):
+def analyze_visible_bodies(app, scope=None):
     catalog = _try_load_catalog()
-    bodies = _collect_visible_bodies(app)
-    return _analyze_bodies(bodies, catalog)
+    scope = scope if isinstance(scope, _BodyScope) else _BodyScope()
+    bodies = _collect_visible_bodies(app, scope)
+    return _analyze_bodies(bodies, catalog, scope)
 
 
-def _collect_visible_bodies(app):
+def _collect_visible_bodies(app, scope=None):
     bodies = []
     seen_tokens = set()
+    scope = scope if isinstance(scope, _BodyScope) else _BodyScope()
     design = adsk.fusion.Design.cast(app.activeProduct)
     if not design:
         print("DIYGC Analyse: Kein aktives Fusion-Design.")
         return bodies
 
     root = design.rootComponent
+    if not root:
+        return bodies
+
+    if scope.mode == SCOPE_ACTIVE_COMPONENT:
+        target = _active_component_scope_target(app, design, root)
+        scope.label = _scope_label(scope.mode, [target])
+        _append_scope_target(target, bodies, seen_tokens)
+        return bodies
+
+    if scope.mode == SCOPE_SELECTED_COMPONENTS:
+        for target in scope.selected_entities:
+            _append_scope_target(target, bodies, seen_tokens)
+        return bodies
+
     if root:
         root_path = [_safe_component_name(root)]
         _append_component_bodies(root, root_path, bodies, seen_tokens)
         _append_occurrence_bodies_recursive(root.occurrences, root_path, bodies, seen_tokens)
     return bodies
+
+
+def _append_scope_target(target, bodies, seen_tokens):
+    occurrence = _as_occurrence(target)
+    if occurrence:
+        path = _occurrence_path(occurrence)
+        _append_occurrence_bodies(occurrence, path, bodies, seen_tokens)
+        return
+
+    component = _as_component(target)
+    if component:
+        component_path = [_safe_component_name(component)]
+        _append_component_bodies(component, component_path, bodies, seen_tokens)
+        _append_occurrence_bodies_recursive(component.occurrences, component_path, bodies, seen_tokens)
+
+
+def _append_occurrence_bodies(occurrence, component_path, bodies, seen_tokens):
+    try:
+        for body in occurrence.bRepBodies:
+            _append_body_if_visible(body, component_path, bodies, seen_tokens)
+        _append_occurrence_bodies_recursive(occurrence.childOccurrences, component_path, bodies, seen_tokens)
+    except Exception as exc:
+        raise RuntimeError(f"DIYGC Analyse: Occurrence-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
 def _append_component_bodies(component, component_path, bodies, seen_tokens):
@@ -101,8 +152,9 @@ def _append_body_if_visible(body, component_path, bodies, seen_tokens):
         raise RuntimeError(f"DIYGC Analyse: Body '{body_name}' konnte nicht gelesen werden: {exc}") from exc
 
 
-def _analyze_bodies(targets, catalog):
-    result = _AnalysisResult()
+def _analyze_bodies(targets, catalog, scope=None):
+    scope = scope if isinstance(scope, _BodyScope) else _BodyScope()
+    result = _AnalysisResult(scope.label)
     for target in targets:
         body = target.body
         if export_core._is_excluded_from_export(body):
@@ -148,6 +200,95 @@ def _safe_occurrence_name(occurrence):
     except Exception:
         pass
     return "Komponente"
+
+
+def _scope_modes():
+    return (SCOPE_ALL_VISIBLE, SCOPE_ACTIVE_COMPONENT, SCOPE_SELECTED_COMPONENTS)
+
+
+def _scope_label(mode, selected_entities=None):
+    if mode == SCOPE_ACTIVE_COMPONENT:
+        label = _scope_entity_label((selected_entities or [None])[0])
+        return f"Aktive Komponente: {label}" if label else "Aktive Komponente"
+    if mode == SCOPE_SELECTED_COMPONENTS:
+        labels = [_scope_entity_label(entity) for entity in (selected_entities or [])]
+        labels = [label for label in labels if label]
+        if labels:
+            return f"Ausgewählte Komponente(n): {', '.join(labels)}"
+        return "Ausgewählte Komponente(n): 0"
+    return "Alle sichtbaren Bodies"
+
+
+def _scope_entity_label(entity):
+    occurrence = _as_occurrence(entity)
+    if occurrence:
+        return _safe_occurrence_name(occurrence)
+    component = _as_component(entity)
+    if component:
+        return _safe_component_name(component)
+    return ""
+
+
+def _active_component_scope_target(app, design, root):
+    for owner in (design, app):
+        for attr in ("activeComponent", "activeOccurrence", "activeEditObject"):
+            try:
+                value = getattr(owner, attr, None)
+            except Exception:
+                value = None
+            if _as_occurrence(value) or _as_component(value):
+                return value
+    return root
+
+
+def _as_occurrence(entity):
+    if not entity:
+        return None
+    try:
+        occurrence_cls = getattr(adsk.fusion, "Occurrence", None)
+        if occurrence_cls and hasattr(occurrence_cls, "cast"):
+            occurrence = occurrence_cls.cast(entity)
+            if occurrence:
+                return occurrence
+    except Exception:
+        pass
+    try:
+        if hasattr(entity, "bRepBodies") and hasattr(entity, "childOccurrences"):
+            return entity
+    except Exception:
+        pass
+    return None
+
+
+def _as_component(entity):
+    if not entity:
+        return None
+    try:
+        component_cls = getattr(adsk.fusion, "Component", None)
+        if component_cls and hasattr(component_cls, "cast"):
+            component = component_cls.cast(entity)
+            if component:
+                return component
+    except Exception:
+        pass
+    try:
+        if hasattr(entity, "bRepBodies") and hasattr(entity, "occurrences") and not hasattr(entity, "childOccurrences"):
+            return entity
+    except Exception:
+        pass
+    return None
+
+
+def _occurrence_path(occurrence):
+    names = []
+    current = occurrence
+    while current:
+        names.append(_safe_occurrence_name(current))
+        try:
+            current = current.assemblyContext
+        except Exception:
+            current = None
+    return list(reversed([name for name in names if name]))
 
 
 def _validate_export_body(body, catalog):
@@ -335,6 +476,7 @@ def _format_result_message(result):
     lines = [
         "DIYGC Analyse",
         "",
+        f"Scope: {result.scope_label}",
         f"Exportbereit: {result.ready_count}",
         f"Ausgeschlossen: {result.excluded_count}",
         f"Mit fehlenden/inkonsistenten Angaben: {result.issue_count}",
