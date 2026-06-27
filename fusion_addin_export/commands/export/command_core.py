@@ -16,8 +16,16 @@ _ATTR_KEY_EDGE_FRONT = "edge_front"
 _ATTR_KEY_EDGE_BACK = "edge_back"
 _ATTR_KEY_EDGE_LEFT = "edge_left"
 _ATTR_KEY_EDGE_RIGHT = "edge_right"
-_ATTR_KEY_SURFACE_TOP_TEXT = "surface_top_text"
-_ATTR_KEY_SURFACE_BOTTOM_TEXT = "surface_bottom_text"
+_ATTR_KEY_SURFACE_TOP = "surface_top"
+_ATTR_KEY_SURFACE_BOTTOM = "surface_bottom"
+_ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT = "edge_front_custom_text"
+_ATTR_KEY_EDGE_BACK_CUSTOM_TEXT = "edge_back_custom_text"
+_ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT = "edge_left_custom_text"
+_ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT = "edge_right_custom_text"
+_ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT = "surface_top_custom_text"
+_ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT = "surface_bottom_custom_text"
+_ATTR_KEY_NOTES = "notes"
+_CUSTOM_TEXT_VALUE = "__text__"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
 _TYPE_FIELD_EDGE_THICKNESS = "edge_thickness"
@@ -190,8 +198,9 @@ def _body_to_csv_row(body, catalog):
     edge_back = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_BACK)
     edge_left = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_LEFT)
     edge_right = _resolve_edge_export_for_side(body, catalog, _ATTR_KEY_EDGE_RIGHT)
-    surface_top_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_TOP_TEXT)
-    surface_bottom_text = _resolve_surface_text_for_export(body, _ATTR_KEY_SURFACE_BOTTOM_TEXT)
+    surface_top = _resolve_surface_export_for_side(body, catalog, _ATTR_KEY_SURFACE_TOP)
+    surface_bottom = _resolve_surface_export_for_side(body, catalog, _ATTR_KEY_SURFACE_BOTTOM)
+    notes = _resolve_text_attribute_for_export(body, _ATTR_KEY_NOTES)
     return [
         name,
         length,
@@ -210,8 +219,9 @@ def _body_to_csv_row(body, catalog):
         edge_left[2],
         edge_right[1],
         edge_right[2],
-        surface_top_text,
-        surface_bottom_text,
+        surface_top,
+        surface_bottom,
+        notes,
     ]
 
 
@@ -436,6 +446,14 @@ def _resolve_edge_export_for_side(body, catalog, attr_key):
 
     if not edge_id:
         return ("", "", "")
+    if edge_id == _CUSTOM_TEXT_VALUE:
+        custom_text = _resolve_text_attribute_for_export(body, _custom_text_attr_for_attr(attr_key))
+        if not custom_text:
+            raise ValueError(
+                f"Body '{_safe_body_name(body)}' nutzt Freitext-Kante '{attr_key}', "
+                "aber der Freitext fehlt."
+            )
+        return (_CUSTOM_TEXT_VALUE, custom_text, _fmt_mm(0.0))
 
     edge_item = catalog.get(edge_id)
     if not edge_item:
@@ -457,7 +475,7 @@ def _resolve_edge_export_for_side(body, catalog, attr_key):
     )
 
 
-def _resolve_surface_text_for_export(body, attr_key):
+def _resolve_text_attribute_for_export(body, attr_key):
     attrs = _collect_body_attributes(body)
     for group, key, value in attrs:
         if group != _ATTRIBUTE_GROUP:
@@ -466,6 +484,44 @@ def _resolve_surface_text_for_export(body, attr_key):
             continue
         return str(value or "").strip()
     return ""
+
+
+def _resolve_surface_export_for_side(body, catalog, attr_key):
+    surface_id = _resolve_text_attribute_for_export(body, attr_key)
+    if not surface_id:
+        return ""
+    if surface_id == _CUSTOM_TEXT_VALUE:
+        custom_text = _resolve_text_attribute_for_export(body, _custom_text_attr_for_attr(attr_key))
+        if not custom_text:
+            raise ValueError(
+                f"Body '{_safe_body_name(body)}' nutzt Freitext-Oberfläche '{attr_key}', "
+                "aber der Freitext fehlt."
+            )
+        return custom_text
+    surface_item = catalog.get(surface_id)
+    if not surface_item:
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert Oberfläche '{surface_id}', "
+            "die nicht in catalog.json existiert."
+        )
+    if surface_item.type != "surface":
+        raise ValueError(
+            f"Body '{_safe_body_name(body)}' referenziert '{surface_id}', "
+            "aber der Katalogeintrag ist nicht vom Typ 'surface'."
+        )
+    return str(surface_item.name or "").strip()
+
+
+def _custom_text_attr_for_attr(attr_key):
+    mapping = {
+        _ATTR_KEY_EDGE_FRONT: _ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_BACK: _ATTR_KEY_EDGE_BACK_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_LEFT: _ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT,
+        _ATTR_KEY_EDGE_RIGHT: _ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT,
+        _ATTR_KEY_SURFACE_TOP: _ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT,
+        _ATTR_KEY_SURFACE_BOTTOM: _ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT,
+    }
+    return mapping.get(attr_key, "")
 
 
 def _extract_edge_thickness(catalog_item):
@@ -554,8 +610,9 @@ def _write_csv(path, rows):
         "edge_left_thickness_mm",
         "edge_right_name",
         "edge_right_thickness_mm",
-        "surface_top_text",
-        "surface_bottom_text",
+        "surface_top_name",
+        "surface_bottom_name",
+        "notes",
     ]
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file, delimiter=_get_csv_delimiter())

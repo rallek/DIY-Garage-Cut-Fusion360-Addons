@@ -4,7 +4,7 @@ import re
 import adsk.core
 import adsk.fusion
 
-from shared.catalog import get_catalog_types, get_type_fields, get_type_label, load_catalog
+from shared.catalog import get_catalog_types, get_type_capabilities, get_type_fields, get_type_label, load_catalog
 
 WORKSPACE_ID = "FusionSolidEnvironment"
 PRIMARY_PANEL_ID = "SolidModifyPanel"
@@ -31,8 +31,16 @@ ATTR_KEY_EDGE_FRONT = "edge_front"
 ATTR_KEY_EDGE_BACK = "edge_back"
 ATTR_KEY_EDGE_LEFT = "edge_left"
 ATTR_KEY_EDGE_RIGHT = "edge_right"
-ATTR_KEY_SURFACE_TOP_TEXT = "surface_top_text"
-ATTR_KEY_SURFACE_BOTTOM_TEXT = "surface_bottom_text"
+ATTR_KEY_SURFACE_TOP = "surface_top"
+ATTR_KEY_SURFACE_BOTTOM = "surface_bottom"
+ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT = "edge_front_custom_text"
+ATTR_KEY_EDGE_BACK_CUSTOM_TEXT = "edge_back_custom_text"
+ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT = "edge_left_custom_text"
+ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT = "edge_right_custom_text"
+ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT = "surface_top_custom_text"
+ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT = "surface_bottom_custom_text"
+ATTR_KEY_NOTES = "notes"
+CUSTOM_TEXT_VALUE = "__text__"
 _TYPE_FIELD_TRIM_ALLOWANCE = "sheet_default_trim_allowance"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
@@ -44,23 +52,37 @@ _INPUT_FILTER_TYPE = "diygc_filter_type"
 _INPUT_MATERIAL = "diygc_material"
 _INPUT_TRIM_ALLOWANCE = "diygc_trim_allowance_mm"
 _INPUT_GRAIN_DIRECTION = "diygc_grain_direction"
+_INPUT_EDGES_ENABLED = "diygc_edges_enabled"
 _INPUT_FRONT_FACE = "diygc_front_face"
 _INPUT_EDGES_HEADER = "diygc_edges_header"
 _INPUT_EDGE_MODE = "diygc_edge_mode"
 _INPUT_EDGE_ALL = "diygc_edge_all"
+_INPUT_ALL_SURFACE = "diygc_all_surface"
+_INPUT_ALL_SURFACE_TEXT = "diygc_all_surface_text"
 _INPUT_EDGE_FRONT_ENABLED = "diygc_edge_front_enabled"
 _INPUT_EDGE_FRONT = "diygc_edge_front"
+_INPUT_EDGE_FRONT_TEXT = "diygc_edge_front_text"
 _INPUT_EDGE_BACK_ENABLED = "diygc_edge_back_enabled"
 _INPUT_EDGE_BACK = "diygc_edge_back"
+_INPUT_EDGE_BACK_TEXT = "diygc_edge_back_text"
 _INPUT_EDGE_LEFT_ENABLED = "diygc_edge_left_enabled"
 _INPUT_EDGE_LEFT = "diygc_edge_left"
+_INPUT_EDGE_LEFT_TEXT = "diygc_edge_left_text"
 _INPUT_EDGE_RIGHT_ENABLED = "diygc_edge_right_enabled"
 _INPUT_EDGE_RIGHT = "diygc_edge_right"
+_INPUT_EDGE_RIGHT_TEXT = "diygc_edge_right_text"
 _INPUT_SURFACE_ALL_TEXT = "diygc_surface_all_text"
 _INPUT_TOP_ENABLED = "diygc_top_enabled"
-_INPUT_TOP_TEXT = "diygc_top_text"
+_INPUT_TOP_SURFACE = "diygc_top_surface"
+_INPUT_TOP_SURFACE_TEXT = "diygc_top_surface_text"
 _INPUT_BOTTOM_ENABLED = "diygc_bottom_enabled"
-_INPUT_BOTTOM_TEXT = "diygc_bottom_text"
+_INPUT_BOTTOM_SURFACE = "diygc_bottom_surface"
+_INPUT_BOTTOM_SURFACE_TEXT = "diygc_bottom_surface_text"
+_INPUT_SWAP_LEFT_RIGHT = "diygc_swap_left_right"
+_INPUT_SWAP_SURFACES = "diygc_swap_surfaces"
+_INPUT_NOTES_HEADER = "diygc_notes_header"
+_INPUT_NOTES = "diygc_notes"
+_INPUT_APPLY = "diygc_apply"
 
 _handlers = []
 _active_panel_id = None
@@ -74,7 +96,13 @@ _edge_entries = []
 _edge_by_id = {}
 _edge_label_to_id = {}
 _edge_id_to_label = {}
+_surface_entries = []
+_surface_by_id = {}
+_surface_label_to_id = {}
+_surface_id_to_label = {}
 _body_token = ""
+_body_ref = None
+_body_selection_ref = None
 _front_face_token = ""
 _front_body_token = ""
 _ui_lang = "de"
@@ -95,13 +123,16 @@ _STRINGS = {
         "grain_length": "Längs",
         "grain_width": "Quer",
         "front_face": "Vorderkante (Fläche)",
-        "edges_section": "Bekantung und Oberflächen",
+        "edges_enabled": "Oberflächen definieren",
+        "edges_section": "Oberflächen",
         "mode": "Modus",
         "mode_none": "Keine",
         "mode_all": "Alle gemeinsam",
         "mode_individual": "Individuell",
         "edge_all": "Kantenmaterial (alle)",
         "edge_none": "(Keine Kante)",
+        "custom_text": "Text",
+        "custom_text_value": "Freitext",
         "edge_front_enabled": "Vorne bekanten",
         "edge_front": "Kante vorne",
         "edge_back_enabled": "Hinten bekanten",
@@ -110,11 +141,18 @@ _STRINGS = {
         "edge_left": "Kante links",
         "edge_right_enabled": "Rechts bekanten",
         "edge_right": "Kante rechts",
+        "swap_left_right": "Links/Rechts tauschen",
         "surface_all_text": "Oberfläche (alle)",
+        "surface_all": "Oberfläche (alle)",
         "top_enabled": "Oberseite bearbeiten",
         "top_text": "Oberfläche oben",
         "bottom_enabled": "Unterseite bearbeiten",
         "bottom_text": "Oberfläche unten",
+        "swap_surfaces": "Oben/Unten tauschen",
+        "notes_section": "Fertigungshinweise",
+        "surface_none": "(Keine Oberfläche)",
+        "notes": "Fertigungshinweise",
+        "apply": "Anwenden",
         "face_prompt": "Planare Seitenfläche wählen",
     },
     "en": {
@@ -132,13 +170,16 @@ _STRINGS = {
         "grain_length": "Length",
         "grain_width": "Width",
         "front_face": "Front edge (face)",
-        "edges_section": "Edge banding and surfaces",
+        "edges_enabled": "Define surfaces",
+        "edges_section": "Surfaces",
         "mode": "Mode",
         "mode_none": "None",
         "mode_all": "All together",
         "mode_individual": "Individual",
         "edge_all": "Edge material (all)",
         "edge_none": "(No edge)",
+        "custom_text": "Text",
+        "custom_text_value": "Free text",
         "edge_front_enabled": "Band front",
         "edge_front": "Front edge",
         "edge_back_enabled": "Band back",
@@ -147,11 +188,18 @@ _STRINGS = {
         "edge_left": "Left edge",
         "edge_right_enabled": "Band right",
         "edge_right": "Right edge",
+        "swap_left_right": "Swap left/right",
         "surface_all_text": "Surface (all)",
+        "surface_all": "Surfaces (all)",
         "top_enabled": "Edit top side",
         "top_text": "Top surface",
         "bottom_enabled": "Edit bottom side",
         "bottom_text": "Bottom surface",
+        "swap_surfaces": "Swap top/bottom",
+        "notes_section": "Production notes",
+        "surface_none": "(No surface)",
+        "notes": "Production notes",
+        "apply": "Apply",
         "face_prompt": "Select planar side face",
     },
 }
@@ -169,6 +217,11 @@ class _MaterialEntry:
         supports_grain,
         sheet_has_grain,
         default_grain_direction,
+        supports_body_material,
+        supports_edges,
+        supports_surface,
+        surface_entry_mode,
+        edge_entry_mode,
     ):
         self.id = item_id
         self.type = item_type
@@ -179,6 +232,11 @@ class _MaterialEntry:
         self.supports_grain = supports_grain
         self.sheet_has_grain = sheet_has_grain
         self.default_grain_direction = default_grain_direction
+        self.supports_body_material = supports_body_material
+        self.supports_edges = supports_edges
+        self.supports_surface = supports_surface
+        self.surface_entry_mode = surface_entry_mode
+        self.edge_entry_mode = edge_entry_mode
 
 
 class _EdgeEntry:
@@ -189,10 +247,19 @@ class _EdgeEntry:
         self.thickness_mm = thickness_mm
 
 
+class _SurfaceEntry:
+    def __init__(self, item_id, name, appearance_name):
+        self.id = item_id
+        self.name = name
+        self.appearance_name = appearance_name
+
+
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         global _ui_lang
         _ui_lang = _detect_ui_lang()
+        _clear_body_selection_memory()
+        _clear_front_face_memory()
 
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
         cmd = event_args.command
@@ -238,13 +305,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         _populate_grain_direction_dropdown(grain_pick, "none")
         grain_pick.isVisible = False
-        front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
-        front_face.addSelectionFilter("PlanarFaces")
-        front_face.setSelectionLimits(0, 1)
-        try:
-            front_face.isUseCurrentSelections = False
-        except Exception:
-            pass
+        edges_enabled = inputs.addBoolValueInput(_INPUT_EDGES_ENABLED, _t("edges_enabled"), True, "", False)
+        edges_enabled.isVisible = False
 
         edges_header = inputs.addTextBoxCommandInput(_INPUT_EDGES_HEADER, "", _t("edges_section"), 1, True)
         edges_header.isFullWidth = True
@@ -253,9 +315,20 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _INPUT_EDGE_MODE, _t("mode"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
         _populate_mode_dropdown(edge_mode, "individual")
+        front_face = inputs.addSelectionInput(_INPUT_FRONT_FACE, _t("front_face"), _t("face_prompt"))
+        front_face.addSelectionFilter("PlanarFaces")
+        front_face.setSelectionLimits(0, 1)
+        try:
+            front_face.isUseCurrentSelections = False
+        except Exception:
+            pass
         edge_all = inputs.addDropDownCommandInput(
             _INPUT_EDGE_ALL, _t("edge_all"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        all_surface = inputs.addDropDownCommandInput(
+            _INPUT_ALL_SURFACE, _t("surface_all"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        all_surface_text = inputs.addStringValueInput(_INPUT_ALL_SURFACE_TEXT, _t("custom_text_value"), "")
 
         edge_front_enabled = inputs.addBoolValueInput(
             _INPUT_EDGE_FRONT_ENABLED, _t("edge_front_enabled"), True, "", False
@@ -263,37 +336,59 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         edge_front = inputs.addDropDownCommandInput(
             _INPUT_EDGE_FRONT, _t("edge_front"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        edge_front_text = inputs.addStringValueInput(_INPUT_EDGE_FRONT_TEXT, _t("custom_text_value"), "")
         edge_back_enabled = inputs.addBoolValueInput(
             _INPUT_EDGE_BACK_ENABLED, _t("edge_back_enabled"), True, "", False
         )
         edge_back = inputs.addDropDownCommandInput(
             _INPUT_EDGE_BACK, _t("edge_back"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        edge_back_text = inputs.addStringValueInput(_INPUT_EDGE_BACK_TEXT, _t("custom_text_value"), "")
         edge_left_enabled = inputs.addBoolValueInput(
             _INPUT_EDGE_LEFT_ENABLED, _t("edge_left_enabled"), True, "", False
         )
         edge_left = inputs.addDropDownCommandInput(
             _INPUT_EDGE_LEFT, _t("edge_left"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        edge_left_text = inputs.addStringValueInput(_INPUT_EDGE_LEFT_TEXT, _t("custom_text_value"), "")
         edge_right_enabled = inputs.addBoolValueInput(
             _INPUT_EDGE_RIGHT_ENABLED, _t("edge_right_enabled"), True, "", False
         )
         edge_right = inputs.addDropDownCommandInput(
             _INPUT_EDGE_RIGHT, _t("edge_right"), adsk.core.DropDownStyles.TextListDropDownStyle
         )
+        edge_right_text = inputs.addStringValueInput(_INPUT_EDGE_RIGHT_TEXT, _t("custom_text_value"), "")
+        swap_left_right = inputs.addBoolValueInput(_INPUT_SWAP_LEFT_RIGHT, _t("swap_left_right"), False, "", False)
         top_enabled = inputs.addBoolValueInput(_INPUT_TOP_ENABLED, _t("top_enabled"), True, "", False)
         surface_all_text = inputs.addStringValueInput(_INPUT_SURFACE_ALL_TEXT, _t("surface_all_text"), "")
-        top_text = inputs.addStringValueInput(_INPUT_TOP_TEXT, _t("top_text"), "")
+        top_surface = inputs.addDropDownCommandInput(
+            _INPUT_TOP_SURFACE, _t("top_text"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        top_surface_text = inputs.addStringValueInput(_INPUT_TOP_SURFACE_TEXT, _t("custom_text_value"), "")
         bottom_enabled = inputs.addBoolValueInput(_INPUT_BOTTOM_ENABLED, _t("bottom_enabled"), True, "", False)
-        bottom_text = inputs.addStringValueInput(_INPUT_BOTTOM_TEXT, _t("bottom_text"), "")
+        bottom_surface = inputs.addDropDownCommandInput(
+            _INPUT_BOTTOM_SURFACE, _t("bottom_text"), adsk.core.DropDownStyles.TextListDropDownStyle
+        )
+        bottom_surface_text = inputs.addStringValueInput(_INPUT_BOTTOM_SURFACE_TEXT, _t("custom_text_value"), "")
+        swap_surfaces = inputs.addBoolValueInput(_INPUT_SWAP_SURFACES, _t("swap_surfaces"), False, "", False)
+        notes_header = inputs.addTextBoxCommandInput(_INPUT_NOTES_HEADER, "", _t("notes_section"), 1, True)
+        notes_header.isFullWidth = True
+        notes = inputs.addTextBoxCommandInput(_INPUT_NOTES, _t("notes"), "", 4, False)
+        notes.isFullWidth = True
+        apply_button = inputs.addBoolValueInput(_INPUT_APPLY, _t("apply"), False, "", False)
+        apply_button.isVisible = False
         _populate_edge_dropdown(edge_all, None)
         _populate_edge_dropdown(edge_front, None)
         _populate_edge_dropdown(edge_back, None)
         _populate_edge_dropdown(edge_left, None)
         _populate_edge_dropdown(edge_right, None)
+        _populate_surface_dropdown(all_surface, None)
+        _populate_surface_dropdown(top_surface, None)
+        _populate_surface_dropdown(bottom_surface, None)
 
         _set_main_controls_visible(inputs, False)
         _set_edge_controls_visible(inputs, False)
+        _set_notes_controls_visible(inputs, False)
         _set_edge_dropdown_enabled_state(inputs)
 
         on_input_changed = _InputChangedHandler()
@@ -307,6 +402,16 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         on_validate = _ValidateInputsHandler()
         cmd.validateInputs.add(on_validate)
         _handlers.append(on_validate)
+
+        on_destroy = _CommandDestroyHandler()
+        cmd.destroy.add(on_destroy)
+        _handlers.append(on_destroy)
+
+
+class _CommandDestroyHandler(adsk.core.CommandEventHandler):
+    def notify(self, args):
+        _clear_body_selection_memory()
+        _clear_front_face_memory()
 
 
 class _InputChangedHandler(adsk.core.InputChangedEventHandler):
@@ -322,6 +427,8 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_BODY:
+                if not _selected_body_from_input(inputs):
+                    _clear_body_selection_memory()
                 _refresh_inputs_from_selected_body(inputs)
                 return
 
@@ -341,14 +448,22 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     _update_trim_allowance_visibility(inputs, None)
                     _set_grain_direction_dropdown(inputs, "none")
                     _update_grain_direction_visibility(inputs, None)
+                    _set_edge_controls_for_material(inputs, None)
+                    _set_notes_controls_visible(inputs, False)
                     return
                 _update_trim_allowance_visibility(inputs, selected_id)
                 _update_grain_direction_visibility(inputs, selected_id)
+                _set_edge_controls_for_material(inputs, selected_id)
+                _set_notes_controls_visible(inputs, True)
                 entry = _material_by_id.get(selected_id)
                 if entry and entry.supports_trim_allowance:
                     _set_input_value(inputs, _INPUT_TRIM_ALLOWANCE, _format_trim_allowance(entry.default_trim_allowance_mm))
                 if _material_requires_grain_direction(entry):
                     _set_grain_direction_dropdown(inputs, entry.default_grain_direction)
+                return
+
+            if changed.id == _INPUT_EDGES_ENABLED:
+                _update_edge_surface_ui(inputs, restore_front_face=False)
                 return
 
             if changed.id == _INPUT_FRONT_FACE:
@@ -359,9 +474,10 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     _set_edge_controls_visible(inputs, False)
                     return
                 _validate_front_face_selection(inputs, body)
-                _sync_edge_controls_from_body_attributes(inputs, body)
+                _sync_edge_controls_from_body_attributes(
+                    inputs, body, preserve_current_mode=True, preserve_edges_enabled=True
+                )
                 _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
                 return
 
             if changed.id in (
@@ -373,16 +489,34 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 _INPUT_BOTTOM_ENABLED,
             ):
                 _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
+                return
+
+            if changed.id == _INPUT_SWAP_SURFACES:
+                _swap_surface_inputs(inputs)
+                _update_edge_surface_ui(inputs)
+                return
+
+            if changed.id == _INPUT_SWAP_LEFT_RIGHT:
+                _swap_left_right_edge_inputs(inputs)
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id == _INPUT_EDGE_MODE:
-                _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs)
+                return
+
+            if changed.id == _INPUT_ALL_SURFACE:
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id in (_INPUT_EDGE_ALL, _INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
-                _apply_edge_appearance_preview(inputs)
+                _update_edge_surface_ui(inputs)
+                return
+            if changed.id in (_INPUT_TOP_SURFACE, _INPUT_BOTTOM_SURFACE):
+                _update_edge_surface_ui(inputs)
+                return
+            if changed.id == _INPUT_APPLY:
+                _handle_apply_button(inputs)
                 return
         except Exception as exc:
             print(f"Properties: InputChanged-Fehler: {exc}")
@@ -402,82 +536,7 @@ class _ExecuteHandler(adsk.core.CommandEventHandler):
             if not inputs:
                 ui.messageBox("Properties-Fehler: Keine Command-Inputs verfügbar.")
                 return
-
-            body = _read_selected_body(inputs)
-            if not body:
-                ui.messageBox(f"Bitte im Dialog einen {_t('body').lower()} auswählen.")
-                return
-
-            material_id = _read_material_dropdown_value(inputs, raise_on_unknown=True)
-            if not material_id:
-                ui.messageBox(f"Bitte ein {_t('material').lower()} auswählen.")
-                return
-            entry = _material_by_id.get(material_id)
-            if not entry:
-                raise RuntimeError(f"Material '{material_id}' ist nicht im Katalog vorhanden.")
-
-            old_material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
-            _write_body_attribute_or_raise(body, ATTR_KEY_MATERIAL_ID, material_id)
-
-            if entry.supports_trim_allowance:
-                trim_input = _read_string_input(inputs, _INPUT_TRIM_ALLOWANCE, "")
-                trim_allowance_mm = _parse_trim_allowance(trim_input)
-                _write_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM, _format_trim_allowance(trim_allowance_mm))
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
-
-            if _material_requires_grain_direction(entry):
-                grain_direction = _read_grain_direction_dropdown(inputs)
-                _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
-
-            top_text, bottom_text = _read_surface_texts_for_mode(inputs)
-            if top_text:
-                _write_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_TEXT, top_text)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_TEXT)
-            if bottom_text:
-                _write_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, bottom_text)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_TEXT)
-
-            edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-            side_faces = None
-            if edge_mode == "individual":
-                side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
-                if not side_faces:
-                    raise RuntimeError("Für Modus 'Individuell' bitte zuerst eine Vorderkante auswählen.")
-                _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
-                edge_values = _read_edge_values_for_mode(inputs, require_material=True)
-                for attr_key, edge_id in edge_values.items():
-                    if edge_id:
-                        _write_body_attribute_or_raise(body, attr_key, edge_id)
-                    else:
-                        _clear_body_attribute_or_raise(body, attr_key)
-            else:
-                _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT)
-                _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
-
-            if material_id != old_material_id:
-                _apply_material_appearance_or_raise(body, material_id)
-
-            if edge_mode == "individual" and side_faces:
-                _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_edge_values_for_mode(inputs))
-
-            if _is_body_likely_read_only(body):
-                diag = _diagnose_attribute_context(body)
-                ui.messageBox(
-                    "Eigenschaften gespeichert, aber der Body wirkt schreibgeschützt.\n"
-                    "Bitte Ergebnis prüfen.\n\nDiagnose:\n"
-                    f"{diag}"
-                )
-                return
-
-            print(f"Properties gespeichert für Body: {body.name}")
+            _save_properties_from_inputs(inputs, ui)
         except Exception as exc:
             print(f"Properties: Execute-Fehler: {exc}")
             ui.messageBox(f"Eigenschaften fehlgeschlagen:\n{exc}")
@@ -498,34 +557,171 @@ class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
             event_args.areInputsValid = False
 
 
+def _handle_apply_button(inputs):
+    app = adsk.core.Application.get()
+    ui = app.userInterface if app else None
+    apply_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_APPLY))
+    if apply_input:
+        apply_input.value = False
+    if not ui:
+        print("Properties: App/UI nicht verfügbar.")
+        return
+    try:
+        body = _save_properties_from_inputs(inputs, ui)
+        if body:
+            _set_body_selection(inputs, body)
+            _refresh_inputs_from_selected_body(inputs)
+    except Exception as exc:
+        print(f"Properties: Anwenden-Fehler: {exc}")
+        ui.messageBox(f"Anwenden fehlgeschlagen:\n{exc}")
+
+
+def _save_properties_from_inputs(inputs, ui):
+    body = _read_selected_body(inputs)
+    if not body:
+        ui.messageBox(f"Bitte im Dialog einen {_t('body').lower()} auswählen.")
+        return None
+
+    material_id = _read_material_dropdown_value(inputs, raise_on_unknown=True)
+    if not material_id:
+        ui.messageBox(f"Bitte ein {_t('material').lower()} auswählen.")
+        return None
+    entry = _material_by_id.get(material_id)
+    if not entry:
+        raise RuntimeError(f"Material '{material_id}' ist nicht im Katalog vorhanden.")
+
+    old_material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
+    _write_body_attribute_or_raise(body, ATTR_KEY_MATERIAL_ID, material_id)
+
+    if entry.supports_trim_allowance:
+        trim_input = _read_string_input(inputs, _INPUT_TRIM_ALLOWANCE, "")
+        trim_allowance_mm = _parse_trim_allowance(trim_input)
+        _write_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM, _format_trim_allowance(trim_allowance_mm))
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_TRIM_ALLOWANCE_MM)
+
+    if _material_requires_grain_direction(entry):
+        grain_direction = _read_grain_direction_dropdown(inputs)
+        _write_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION, grain_direction)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_GRAIN_DIRECTION)
+
+    edge_section_enabled = _is_edges_enabled(inputs)
+    edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") if edge_section_enabled else "none"
+    surface_values = {ATTR_KEY_SURFACE_TOP: "", ATTR_KEY_SURFACE_BOTTOM: ""}
+
+    if entry.supports_surface and edge_section_enabled:
+        surface_values = _read_surface_values_for_mode(inputs)
+        _validate_custom_text_values(inputs, surface_values)
+        _write_or_clear_body_attribute(body, ATTR_KEY_SURFACE_TOP, surface_values.get(ATTR_KEY_SURFACE_TOP, ""))
+        _write_or_clear_body_attribute(body, ATTR_KEY_SURFACE_BOTTOM, surface_values.get(ATTR_KEY_SURFACE_BOTTOM, ""))
+        _write_custom_text_attributes(body, inputs, surface_values)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT)
+
+    notes = _read_string_input(inputs, _INPUT_NOTES, "").strip()
+    _write_or_clear_body_attribute(body, ATTR_KEY_NOTES, notes)
+
+    side_faces = None
+    edge_values = (
+        _read_edge_values_for_mode(inputs, require_material=True) if entry.supports_edges and edge_section_enabled else {}
+    )
+    _validate_custom_text_values(inputs, edge_values)
+    has_edge_values = any(str(value or "").strip() for value in edge_values.values())
+    if entry.supports_edges and edge_mode == "all":
+        _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
+        _write_all_mode_edge_attributes(body, inputs)
+    elif entry.supports_edges and edge_mode == "individual" and has_edge_values:
+        side_faces, front_reference = _resolve_side_faces_from_front_selection(inputs, body)
+        if not side_faces:
+            raise RuntimeError("Für aktivierte Bekantung bitte zuerst eine Vorderkante auswählen.")
+        _write_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE, front_reference)
+        for attr_key, edge_id in edge_values.items():
+            if edge_id:
+                _write_body_attribute_or_raise(body, attr_key, edge_id)
+            else:
+                _clear_body_attribute_or_raise(body, attr_key)
+        _write_custom_text_attributes(body, inputs, edge_values)
+    else:
+        _clear_body_attribute_or_raise(body, ATTR_KEY_FRONT_REFERENCE)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT)
+        _clear_body_attribute_or_raise(body, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT)
+
+    if material_id != old_material_id:
+        _apply_material_appearance_or_raise(body, material_id)
+
+    if entry.supports_edges and edge_mode == "individual" and side_faces:
+        _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
+    elif entry.supports_edges and (edge_mode == "individual" or not edge_section_enabled):
+        _reset_canonical_side_face_appearances(body)
+    if entry.supports_surface and entry.supports_edges:
+        _apply_surface_appearance_from_body_faces(
+            body,
+            surface_values,
+            include_edges=entry.supports_edges and edge_mode == "all",
+            allow_missing_empty_faces=not _has_any_surface_value(surface_values),
+        )
+    elif entry.supports_surface:
+        _apply_global_surface_appearance_to_body_faces(body, surface_values)
+
+    if _is_body_likely_read_only(body):
+        diag = _diagnose_attribute_context(body)
+        ui.messageBox(
+            "Eigenschaften gespeichert, aber der Body wirkt schreibgeschützt.\n"
+            "Bitte Ergebnis prüfen.\n\nDiagnose:\n"
+            f"{diag}"
+        )
+        return body
+
+    print(f"Properties gespeichert für Body: {body.name}")
+    return body
+
+
 def _load_material_entries():
-    global _material_entries, _material_by_id, _edge_entries, _edge_by_id
+    global _material_entries, _material_by_id, _edge_entries, _edge_by_id, _surface_entries, _surface_by_id
     catalog = load_catalog()
     entries = []
     edge_entries = []
+    surface_entries = []
     for item in catalog.items:
         if not item.id or not item.name:
             raise RuntimeError("Katalog enthält ungültiges Material ohne id/name.")
         if not item.appearance:
             raise RuntimeError(f"Katalog-Eintrag '{item.id}' hat keine Appearance.")
+        capabilities = get_type_capabilities(item.type)
         supports_trim = _type_supports_trim_allowance(item.type)
         default_trim = _extract_default_trim_allowance(item, supports_trim)
         supports_grain = _type_supports_grain(item.type)
         sheet_has_grain = _extract_sheet_has_grain(item, supports_grain)
         default_grain_direction = _extract_default_grain_direction(item, supports_grain)
-        entries.append(
-            _MaterialEntry(
-                item_id=item.id,
-                item_type=item.type,
-                name=item.name,
-                appearance_name=item.appearance,
-                supports_trim_allowance=supports_trim,
-                default_trim_allowance_mm=default_trim,
-                supports_grain=supports_grain,
-                sheet_has_grain=sheet_has_grain,
-                default_grain_direction=default_grain_direction,
+        if capabilities.get("supports_body_material", True):
+            entries.append(
+                _MaterialEntry(
+                    item_id=item.id,
+                    item_type=item.type,
+                    name=item.name,
+                    appearance_name=item.appearance,
+                    supports_trim_allowance=supports_trim,
+                    default_trim_allowance_mm=default_trim,
+                    supports_grain=supports_grain,
+                    sheet_has_grain=sheet_has_grain,
+                    default_grain_direction=default_grain_direction,
+                    supports_body_material=True,
+                    supports_edges=bool(capabilities.get("supports_edges")),
+                    supports_surface=bool(capabilities.get("supports_surface")),
+                    surface_entry_mode=str(capabilities.get("surface_entry_mode", "none")),
+                    edge_entry_mode=str(capabilities.get("edge_entry_mode", "none")),
+                )
             )
-        )
         if item.type == "edge":
             edge_entries.append(
                 _EdgeEntry(
@@ -533,6 +729,14 @@ def _load_material_entries():
                     name=item.name,
                     appearance_name=item.appearance,
                     thickness_mm=_extract_edge_thickness(item),
+                )
+            )
+        if item.type == "surface":
+            surface_entries.append(
+                _SurfaceEntry(
+                    item_id=item.id,
+                    name=item.name,
+                    appearance_name=item.appearance,
                 )
             )
 
@@ -543,10 +747,13 @@ def _load_material_entries():
 
     entries.sort(key=lambda entry: (_type_label(entry.type).lower(), entry.name.lower(), entry.id.lower()))
     edge_entries.sort(key=lambda entry: (entry.name.lower(), entry.id.lower()))
+    surface_entries.sort(key=lambda entry: (entry.name.lower(), entry.id.lower()))
     _material_entries = entries
     _material_by_id = {entry.id: entry for entry in entries}
     _edge_entries = edge_entries
     _edge_by_id = {entry.id: entry for entry in edge_entries}
+    _surface_entries = surface_entries
+    _surface_by_id = {entry.id: entry for entry in surface_entries}
 
 
 def _type_supports_trim_allowance(type_id):
@@ -632,14 +839,19 @@ def _refresh_inputs_from_selected_body(inputs):
         _update_trim_allowance_visibility(inputs, None)
         _set_grain_direction_dropdown(inputs, "none")
         _update_grain_direction_visibility(inputs, None)
+        _set_edges_enabled_visible(inputs, False)
+        _set_edges_enabled_value(inputs, False)
         _set_front_face_selection(inputs, None)
         _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_ALL, "")
+        _set_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE, "")
         _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
         _set_edge_enabled(inputs, _INPUT_TOP_ENABLED, False)
         _set_edge_enabled(inputs, _INPUT_BOTTOM_ENABLED, False)
-        _set_input_value(inputs, _INPUT_TOP_TEXT, "")
-        _set_input_value(inputs, _INPUT_BOTTOM_TEXT, "")
+        _set_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE, "")
+        _set_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE, "")
+        _clear_custom_text_inputs(inputs)
+        _set_input_value(inputs, _INPUT_NOTES, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, "")
@@ -650,6 +862,7 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_edge_enabled(inputs, _INPUT_EDGE_RIGHT_ENABLED, False)
         _set_main_controls_visible(inputs, False)
         _set_edge_controls_visible(inputs, False)
+        _set_notes_controls_visible(inputs, False)
         _clear_front_face_memory()
         return
 
@@ -670,6 +883,9 @@ def _refresh_inputs_from_selected_body(inputs):
     _populate_material_dropdown(material_pick, selected_material_id=material_id or None, filter_type=filter_type)
     _update_trim_allowance_visibility(inputs, material_id or None)
     _update_grain_direction_visibility(inputs, material_id or None)
+    _set_edges_enabled_visible(inputs, bool(entry and (entry.supports_edges or entry.supports_surface)))
+    _set_edge_controls_for_material(inputs, material_id or None)
+    _set_notes_controls_visible(inputs, bool(material_id))
 
     if entry and entry.supports_trim_allowance:
         if trim_allowance:
@@ -688,13 +904,23 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_grain_direction_dropdown(inputs, "none")
 
     _ensure_front_face_from_attributes(inputs, body)
-    top_text = str(_get_attr(body, ATTR_KEY_SURFACE_TOP_TEXT, "") or "").strip()
-    bottom_text = str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, "") or "").strip()
-    _set_input_value(inputs, _INPUT_TOP_TEXT, top_text)
-    _set_input_value(inputs, _INPUT_BOTTOM_TEXT, bottom_text)
+    _set_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE, "")
+    _set_input_value(inputs, _INPUT_ALL_SURFACE_TEXT, "")
+    _set_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE, str(_get_attr(body, ATTR_KEY_SURFACE_TOP, "") or "").strip())
+    _set_surface_dropdown_value(
+        inputs, _INPUT_BOTTOM_SURFACE, str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM, "") or "").strip()
+    )
+    _set_input_value(inputs, _INPUT_TOP_SURFACE_TEXT, str(_get_attr(body, ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT, "") or "").strip())
+    _set_input_value(
+        inputs,
+        _INPUT_BOTTOM_SURFACE_TEXT,
+        str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT, "") or "").strip(),
+    )
+    _set_input_value(inputs, _INPUT_NOTES, str(_get_attr(body, ATTR_KEY_NOTES, "") or "").strip())
     _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
     _sync_edge_controls_from_body_attributes(inputs, body)
-    _set_edge_controls_visible(inputs, True)
+    _set_edge_controls_for_material(inputs, material_id or None)
+    _set_notes_controls_visible(inputs, bool(material_id))
     _set_edge_dropdown_enabled_state(inputs)
 
 
@@ -733,7 +959,7 @@ def _set_main_controls_visible(inputs, visible):
         _INPUT_MATERIAL,
         _INPUT_TRIM_ALLOWANCE,
         _INPUT_GRAIN_DIRECTION,
-        _INPUT_FRONT_FACE,
+        _INPUT_EDGES_ENABLED,
     )
     for input_id in main_ids:
         item = inputs.itemById(input_id)
@@ -745,20 +971,31 @@ def _set_edge_controls_visible(inputs, visible):
     edge_ids = (
         _INPUT_EDGES_HEADER,
         _INPUT_EDGE_MODE,
+        _INPUT_FRONT_FACE,
         _INPUT_EDGE_ALL,
+        _INPUT_ALL_SURFACE,
+        _INPUT_ALL_SURFACE_TEXT,
         _INPUT_EDGE_FRONT_ENABLED,
         _INPUT_EDGE_FRONT,
+        _INPUT_EDGE_FRONT_TEXT,
         _INPUT_EDGE_BACK_ENABLED,
         _INPUT_EDGE_BACK,
+        _INPUT_EDGE_BACK_TEXT,
         _INPUT_EDGE_LEFT_ENABLED,
         _INPUT_EDGE_LEFT,
+        _INPUT_EDGE_LEFT_TEXT,
         _INPUT_EDGE_RIGHT_ENABLED,
         _INPUT_EDGE_RIGHT,
+        _INPUT_EDGE_RIGHT_TEXT,
+        _INPUT_SWAP_LEFT_RIGHT,
         _INPUT_SURFACE_ALL_TEXT,
         _INPUT_TOP_ENABLED,
-        _INPUT_TOP_TEXT,
+        _INPUT_TOP_SURFACE,
+        _INPUT_TOP_SURFACE_TEXT,
         _INPUT_BOTTOM_ENABLED,
-        _INPUT_BOTTOM_TEXT,
+        _INPUT_BOTTOM_SURFACE,
+        _INPUT_BOTTOM_SURFACE_TEXT,
+        _INPUT_SWAP_SURFACES,
     )
     for input_id in edge_ids:
         item = inputs.itemById(input_id)
@@ -775,12 +1012,175 @@ def _set_edge_controls_visible(inputs, visible):
             enabled_item.isEnabled = True
 
 
+def _set_notes_controls_visible(inputs, visible):
+    for input_id in (_INPUT_NOTES_HEADER, _INPUT_NOTES, _INPUT_APPLY):
+        item = inputs.itemById(input_id)
+        if item:
+            item.isVisible = bool(visible)
+            item.isEnabled = bool(visible)
+
+
+def _edges_enabled_input(inputs):
+    return adsk.core.BoolValueCommandInput.cast(inputs.itemById(_INPUT_EDGES_ENABLED))
+
+
+def _is_edges_enabled(inputs):
+    item = _edges_enabled_input(inputs)
+    return bool(item and item.value)
+
+
+def _set_edges_enabled_value(inputs, enabled):
+    item = _edges_enabled_input(inputs)
+    if item:
+        item.value = bool(enabled)
+
+
+def _set_edges_enabled_visible(inputs, visible):
+    item = _edges_enabled_input(inputs)
+    if item:
+        item.isVisible = bool(visible)
+        item.isEnabled = bool(visible)
+
+
+def _selected_material_entry(inputs):
+    material_id = _read_material_dropdown_value(inputs, raise_on_unknown=False)
+    return _material_by_id.get(material_id or "")
+
+
+def _edge_surface_ui_state(inputs):
+    body = _read_selected_body(inputs)
+    entry = _selected_material_entry(inputs)
+    supports_edges = bool(entry and entry.supports_edges)
+    supports_surface = bool(entry and entry.supports_surface)
+    supports_any = supports_edges or supports_surface
+    checkbox_visible = bool(body and supports_any)
+    section_visible = checkbox_visible and _is_edges_enabled(inputs)
+    mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+    if section_visible and supports_surface and not supports_edges:
+        mode = "all"
+        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
+    elif section_visible and mode == "none":
+        mode = "individual" if supports_edges else "all"
+        _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
+    mode_visible = section_visible and supports_edges
+    return {
+        "body": body,
+        "entry": entry,
+        "supports_edges": supports_edges,
+        "supports_surface": supports_surface,
+        "checkbox_visible": checkbox_visible,
+        "section_visible": section_visible,
+        "mode": mode,
+        "mode_visible": mode_visible,
+    }
+
+
+def _set_input_visibility(inputs, input_id, visible, enabled=None):
+    item = inputs.itemById(input_id)
+    if not item:
+        return
+    item.isVisible = bool(visible)
+    item.isEnabled = bool(visible if enabled is None else enabled)
+
+
+def _render_edge_surface_ui(inputs, restore_front_face=True):
+    state = _edge_surface_ui_state(inputs)
+    checkbox_visible = state["checkbox_visible"]
+    section_visible = state["section_visible"]
+    mode = state["mode"]
+    mode_visible = state["mode_visible"]
+    supports_edges = state["supports_edges"]
+    supports_surface = state["supports_surface"]
+    body = state["body"]
+
+    _set_edges_enabled_visible(inputs, checkbox_visible)
+    _set_input_visibility(inputs, _INPUT_EDGES_HEADER, section_visible)
+    _set_input_visibility(inputs, _INPUT_EDGE_MODE, mode_visible)
+
+    front_visible = section_visible and mode == "individual" and supports_edges
+    _set_input_visibility(inputs, _INPUT_FRONT_FACE, front_visible)
+    if restore_front_face and front_visible and body:
+        _selected_or_restored_front_face(inputs, body)
+    front_ready = bool(_selected_front_face(inputs)) if front_visible else False
+
+    _set_input_visibility(inputs, _INPUT_EDGE_ALL, False)
+    _set_input_visibility(inputs, _INPUT_SURFACE_ALL_TEXT, False)
+
+    all_surface_visible = section_visible and mode == "all" and supports_surface
+    _set_input_visibility(inputs, _INPUT_ALL_SURFACE, all_surface_visible)
+    all_surface_is_custom = all_surface_visible and _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE) == CUSTOM_TEXT_VALUE
+    _set_input_visibility(inputs, _INPUT_ALL_SURFACE_TEXT, all_surface_is_custom)
+
+    edge_visible = section_visible and mode == "individual" and supports_edges and front_ready
+    for enabled_id, dropdown_id, text_id in (
+        (_INPUT_EDGE_FRONT_ENABLED, _INPUT_EDGE_FRONT, _INPUT_EDGE_FRONT_TEXT),
+        (_INPUT_EDGE_BACK_ENABLED, _INPUT_EDGE_BACK, _INPUT_EDGE_BACK_TEXT),
+        (_INPUT_EDGE_LEFT_ENABLED, _INPUT_EDGE_LEFT, _INPUT_EDGE_LEFT_TEXT),
+        (_INPUT_EDGE_RIGHT_ENABLED, _INPUT_EDGE_RIGHT, _INPUT_EDGE_RIGHT_TEXT),
+    ):
+        _set_input_visibility(inputs, enabled_id, False)
+        _set_edge_enabled(inputs, enabled_id, bool(_read_edge_dropdown_value(inputs, dropdown_id)))
+        _set_input_visibility(inputs, dropdown_id, edge_visible)
+        edge_is_custom = edge_visible and _read_edge_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
+        _set_input_visibility(inputs, text_id, edge_is_custom)
+    _set_input_visibility(inputs, _INPUT_SWAP_LEFT_RIGHT, edge_visible)
+
+    surface_visible = section_visible and mode == "individual" and supports_surface and (
+        not supports_edges or front_ready
+    )
+    for enabled_id, dropdown_id, text_id in (
+        (_INPUT_TOP_ENABLED, _INPUT_TOP_SURFACE, _INPUT_TOP_SURFACE_TEXT),
+        (_INPUT_BOTTOM_ENABLED, _INPUT_BOTTOM_SURFACE, _INPUT_BOTTOM_SURFACE_TEXT),
+    ):
+        _set_input_visibility(inputs, enabled_id, False)
+        _set_edge_enabled(inputs, enabled_id, bool(_read_surface_dropdown_value(inputs, dropdown_id)))
+        _set_input_visibility(inputs, dropdown_id, surface_visible)
+        surface_is_custom = surface_visible and _read_surface_dropdown_value(inputs, dropdown_id) == CUSTOM_TEXT_VALUE
+        _set_input_visibility(inputs, text_id, surface_is_custom)
+    _set_input_visibility(inputs, _INPUT_SWAP_SURFACES, surface_visible)
+
+
+def _update_edge_surface_ui(inputs, restore_front_face=True):
+    body = _read_selected_body(inputs)
+    try:
+        _render_edge_surface_ui(inputs, restore_front_face=restore_front_face)
+    finally:
+        if body:
+            _restore_body_selection_from_memory(inputs)
+
+
+def _clear_custom_text_inputs(inputs):
+    for input_id in (
+        _INPUT_EDGE_FRONT_TEXT,
+        _INPUT_EDGE_BACK_TEXT,
+        _INPUT_EDGE_LEFT_TEXT,
+        _INPUT_EDGE_RIGHT_TEXT,
+        _INPUT_TOP_SURFACE_TEXT,
+        _INPUT_BOTTOM_SURFACE_TEXT,
+        _INPUT_ALL_SURFACE_TEXT,
+    ):
+        _set_input_value(inputs, input_id, "")
+
+
+def _set_edge_controls_for_material(inputs, material_id):
+    _render_edge_surface_ui(inputs)
+
+
 def _front_face_selection_input(inputs):
     return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_FRONT_FACE))
 
 
 def _body_selection_input(inputs):
     return adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_BODY))
+
+
+def _selected_body_from_input(inputs):
+    entity = _selection_entity_by_input_id(inputs, _INPUT_BODY)
+    body = adsk.fusion.BRepBody.cast(entity)
+    if not body:
+        return None
+    native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
+    return native if native else body
 
 
 def _selection_entity_by_input_id(inputs, input_id):
@@ -858,13 +1258,17 @@ def _set_body_selection(inputs, body):
 
 
 def _clear_body_selection_memory():
-    global _body_token
+    global _body_token, _body_ref, _body_selection_ref
     _body_token = ""
+    _body_ref = None
+    _body_selection_ref = None
 
 
-def _remember_body_selection(body):
-    global _body_token
+def _remember_body_selection(body, selection_entity=None):
+    global _body_token, _body_ref, _body_selection_ref
     _body_token = _get_entity_token(body) or ""
+    _body_ref = body
+    _body_selection_ref = selection_entity or body
 
 
 def _clear_front_face_memory():
@@ -900,6 +1304,9 @@ def _get_or_derive_front_face(inputs, body):
 
 
 def _restore_body_selection_from_memory(inputs):
+    if _body_ref:
+        _set_body_selection(inputs, _body_selection_ref or _body_ref)
+        return _body_ref
     if not _body_token:
         return None
     app = adsk.core.Application.get()
@@ -1002,6 +1409,11 @@ def _populate_edge_dropdown(dropdown, selected_edge_id=None):
     none_label = _t("edge_none")
     dropdown.listItems.add(none_label, selected_edge_id is None or selected_edge_id == "")
     selected_found = selected_edge_id in (None, "")
+    text_label = _t("custom_text")
+    _edge_label_to_id[text_label] = CUSTOM_TEXT_VALUE
+    dropdown.listItems.add(text_label, selected_edge_id == CUSTOM_TEXT_VALUE)
+    if selected_edge_id == CUSTOM_TEXT_VALUE:
+        selected_found = True
     for entry in _edge_entries:
         label = _format_edge_label(entry)
         _edge_label_to_id[label] = entry.id
@@ -1035,6 +1447,85 @@ def _read_edge_dropdown_value(inputs, input_id):
     return edge_id
 
 
+def _format_surface_label(entry):
+    return str(entry.name or entry.id)
+
+
+def _populate_surface_dropdown(dropdown, selected_surface_id=None):
+    global _surface_label_to_id, _surface_id_to_label
+    if not dropdown:
+        return
+    _surface_label_to_id = {}
+    _surface_id_to_label = {}
+    dropdown.listItems.clear()
+
+    none_label = _t("surface_none")
+    dropdown.listItems.add(none_label, selected_surface_id is None or selected_surface_id == "")
+    selected_found = selected_surface_id in (None, "")
+    text_label = _t("custom_text")
+    _surface_label_to_id[text_label] = CUSTOM_TEXT_VALUE
+    dropdown.listItems.add(text_label, selected_surface_id == CUSTOM_TEXT_VALUE)
+    if selected_surface_id == CUSTOM_TEXT_VALUE:
+        selected_found = True
+    for entry in _surface_entries:
+        label = _format_surface_label(entry)
+        _surface_label_to_id[label] = entry.id
+        _surface_id_to_label[entry.id] = label
+        is_selected = entry.id == selected_surface_id
+        dropdown.listItems.add(label, is_selected)
+        if is_selected:
+            selected_found = True
+    if not selected_found and selected_surface_id not in (None, ""):
+        unknown_label = f"[Ungültige Oberfläche] {selected_surface_id}"
+        _surface_label_to_id[unknown_label] = str(selected_surface_id)
+        dropdown.listItems.add(unknown_label, True)
+        selected_found = True
+    if not selected_found and dropdown.listItems.count > 0:
+        dropdown.listItems.item(0).isSelected = True
+
+
+def _set_surface_dropdown_value(inputs, input_id, surface_id):
+    dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(input_id))
+    _populate_surface_dropdown(dropdown, surface_id or None)
+
+
+def _swap_surface_inputs(inputs):
+    top_value = _read_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE)
+    bottom_value = _read_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE)
+    top_text = _read_string_input(inputs, _INPUT_TOP_SURFACE_TEXT, "")
+    bottom_text = _read_string_input(inputs, _INPUT_BOTTOM_SURFACE_TEXT, "")
+    _set_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE, bottom_value)
+    _set_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE, top_value)
+    _set_input_value(inputs, _INPUT_TOP_SURFACE_TEXT, bottom_text)
+    _set_input_value(inputs, _INPUT_BOTTOM_SURFACE_TEXT, top_text)
+
+
+def _swap_left_right_edge_inputs(inputs):
+    left_value = _read_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT)
+    right_value = _read_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT)
+    left_text = _read_string_input(inputs, _INPUT_EDGE_LEFT_TEXT, "")
+    right_text = _read_string_input(inputs, _INPUT_EDGE_RIGHT_TEXT, "")
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, right_value)
+    _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, left_value)
+    _set_input_value(inputs, _INPUT_EDGE_LEFT_TEXT, right_text)
+    _set_input_value(inputs, _INPUT_EDGE_RIGHT_TEXT, left_text)
+
+
+def _read_surface_dropdown_value(inputs, input_id):
+    label = _read_dropdown_value(inputs, input_id, "")
+    none_label = _t("surface_none")
+    if not label or label.lower() == none_label.lower():
+        return ""
+    surface_id = _surface_label_to_id.get(label, "")
+    if not surface_id:
+        raise RuntimeError(f"Unbekannter Oberflächen-Dropdown-Wert: '{label}'")
+    if surface_id and surface_id not in _surface_by_id:
+        if surface_id == CUSTOM_TEXT_VALUE:
+            return surface_id
+        raise RuntimeError(f"Oberfläche '{surface_id}' ist nicht im Katalog vorhanden.")
+    return surface_id
+
+
 def _edge_enabled_input(inputs, enabled_input_id):
     return adsk.core.BoolValueCommandInput.cast(inputs.itemById(enabled_input_id))
 
@@ -1050,60 +1541,8 @@ def _set_edge_enabled(inputs, enabled_input_id, enabled):
         item.value = bool(enabled)
 
 
-def _set_edge_dropdown_enabled_state(inputs):
-    header = adsk.core.TextBoxCommandInput.cast(inputs.itemById(_INPUT_EDGES_HEADER))
-    section_visible = bool(header and header.isVisible)
-    edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-    body = _read_selected_body(inputs)
-    has_front_face = bool(body and _get_or_derive_front_face(inputs, body))
-
-    edge_all = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_EDGE_ALL))
-    if edge_all:
-        edge_all.isVisible = False
-        edge_all.isEnabled = False
-
-    mapping = {
-        _INPUT_EDGE_FRONT_ENABLED: _INPUT_EDGE_FRONT,
-        _INPUT_EDGE_BACK_ENABLED: _INPUT_EDGE_BACK,
-        _INPUT_EDGE_LEFT_ENABLED: _INPUT_EDGE_LEFT,
-        _INPUT_EDGE_RIGHT_ENABLED: _INPUT_EDGE_RIGHT,
-    }
-    for enabled_id, dropdown_id in mapping.items():
-        enabled_item = _edge_enabled_input(inputs, enabled_id)
-        dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(dropdown_id))
-        is_visible = section_visible and edge_mode == "individual"
-        is_enabled = is_visible and has_front_face
-        if enabled_item:
-            enabled_item.isVisible = is_visible
-            enabled_item.isEnabled = is_enabled
-        if dropdown:
-            dropdown.isVisible = is_visible
-            dropdown.isEnabled = is_enabled and _is_edge_enabled(inputs, enabled_id)
-
-    surface_all = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_SURFACE_ALL_TEXT))
-    if surface_all:
-        surface_all.isVisible = section_visible and edge_mode == "all"
-        surface_all.isEnabled = edge_mode == "all"
-    top_enabled = _edge_enabled_input(inputs, _INPUT_TOP_ENABLED)
-    top_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_TOP_TEXT))
-    bottom_enabled = _edge_enabled_input(inputs, _INPUT_BOTTOM_ENABLED)
-    bottom_text = adsk.core.StringValueCommandInput.cast(inputs.itemById(_INPUT_BOTTOM_TEXT))
-    for item in (top_enabled, top_text, bottom_enabled, bottom_text):
-        if item:
-            item.isVisible = section_visible and edge_mode == "individual"
-            item.isEnabled = edge_mode == "individual" and has_front_face
-    if top_text:
-        top_text.isEnabled = (
-            edge_mode == "individual"
-            and has_front_face
-            and _is_edge_enabled(inputs, _INPUT_TOP_ENABLED)
-        )
-    if bottom_text:
-        bottom_text.isEnabled = (
-            edge_mode == "individual"
-            and has_front_face
-            and _is_edge_enabled(inputs, _INPUT_BOTTOM_ENABLED)
-        )
+def _set_edge_dropdown_enabled_state(inputs, restore_front_face=True):
+    _render_edge_surface_ui(inputs, restore_front_face=restore_front_face)
 
 
 def _set_filter_dropdown_value(inputs, type_id):
@@ -1241,15 +1680,23 @@ def _has_any_edge_attribute(body):
     return False
 
 
-def _sync_edge_controls_from_body_attributes(inputs, body):
+def _sync_edge_controls_from_body_attributes(
+    inputs, body, preserve_current_mode=False, preserve_edges_enabled=False
+):
     edge_values_by_attr = {
         ATTR_KEY_EDGE_FRONT: str(_get_attr(body, ATTR_KEY_EDGE_FRONT, "") or "").strip(),
         ATTR_KEY_EDGE_BACK: str(_get_attr(body, ATTR_KEY_EDGE_BACK, "") or "").strip(),
         ATTR_KEY_EDGE_LEFT: str(_get_attr(body, ATTR_KEY_EDGE_LEFT, "") or "").strip(),
         ATTR_KEY_EDGE_RIGHT: str(_get_attr(body, ATTR_KEY_EDGE_RIGHT, "") or "").strip(),
     }
-    top_text = str(_get_attr(body, ATTR_KEY_SURFACE_TOP_TEXT, "") or "").strip()
-    bottom_text = str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_TEXT, "") or "").strip()
+    surface_top = str(_get_attr(body, ATTR_KEY_SURFACE_TOP, "") or "").strip()
+    surface_bottom = str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM, "") or "").strip()
+    edge_custom_values = [
+        str(_get_attr(body, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT, "") or "").strip(),
+        str(_get_attr(body, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT, "") or "").strip(),
+        str(_get_attr(body, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT, "") or "").strip(),
+        str(_get_attr(body, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT, "") or "").strip(),
+    ]
 
     edge_values = [
         edge_values_by_attr[ATTR_KEY_EDGE_FRONT],
@@ -1260,23 +1707,37 @@ def _sync_edge_controls_from_body_attributes(inputs, body):
     edge_non_empty = [value for value in edge_values if value]
     edge_all_equal = len(edge_non_empty) == 4 and len(set(edge_values)) == 1
 
-    surface_any = bool(top_text or bottom_text)
-    surface_all_equal = bool(top_text) and top_text == bottom_text
+    surface_any = bool(surface_top or surface_bottom)
     any_edge_data = bool(edge_non_empty)
     any_surface_data = bool(surface_any)
 
-    if not any_edge_data and not any_surface_data:
-        mode = "none"
+    all_edges_are_custom = len(edge_non_empty) == 4 and set(edge_values) == {CUSTOM_TEXT_VALUE}
+    all_edge_custom_equal = bool(edge_custom_values[0]) and len(set(edge_custom_values)) == 1
+    all_surface_equal = bool(surface_top) and surface_top == surface_bottom
+    if all_surface_equal and all_edges_are_custom and all_edge_custom_equal:
+        mode = "all"
     elif any_edge_data:
         mode = "individual"
-    elif surface_all_equal:
-        mode = "all"
+    elif surface_any:
+        mode = "individual"
     else:
         mode = "individual"
+    if preserve_current_mode:
+        current_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
+        if current_mode in ("all", "individual"):
+            mode = current_mode
+    if not preserve_edges_enabled:
+        _set_edges_enabled_value(inputs, bool(any_edge_data or any_surface_data))
 
     _set_mode_dropdown(inputs, _INPUT_EDGE_MODE, mode)
     _set_edge_dropdown_value(inputs, _INPUT_EDGE_ALL, edge_values[0] if edge_all_equal else "")
-    _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, top_text if surface_all_equal else "")
+    _set_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE, surface_top if mode == "all" else "")
+    _set_input_value(
+        inputs,
+        _INPUT_ALL_SURFACE_TEXT,
+        str(_get_attr(body, ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT, "") or "").strip() if mode == "all" else "",
+    )
+    _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
 
     _set_edge_enabled(inputs, _INPUT_EDGE_FRONT_ENABLED, bool(edge_values_by_attr[ATTR_KEY_EDGE_FRONT]))
     _set_edge_enabled(inputs, _INPUT_EDGE_BACK_ENABLED, bool(edge_values_by_attr[ATTR_KEY_EDGE_BACK]))
@@ -1286,8 +1747,12 @@ def _sync_edge_controls_from_body_attributes(inputs, body):
     _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, edge_values_by_attr[ATTR_KEY_EDGE_BACK])
     _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, edge_values_by_attr[ATTR_KEY_EDGE_LEFT])
     _set_edge_dropdown_value(inputs, _INPUT_EDGE_RIGHT, edge_values_by_attr[ATTR_KEY_EDGE_RIGHT])
-    _set_edge_enabled(inputs, _INPUT_TOP_ENABLED, bool(top_text))
-    _set_edge_enabled(inputs, _INPUT_BOTTOM_ENABLED, bool(bottom_text))
+    _set_input_value(inputs, _INPUT_EDGE_FRONT_TEXT, str(_get_attr(body, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT, "") or "").strip())
+    _set_input_value(inputs, _INPUT_EDGE_BACK_TEXT, str(_get_attr(body, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT, "") or "").strip())
+    _set_input_value(inputs, _INPUT_EDGE_LEFT_TEXT, str(_get_attr(body, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT, "") or "").strip())
+    _set_input_value(inputs, _INPUT_EDGE_RIGHT_TEXT, str(_get_attr(body, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT, "") or "").strip())
+    _set_edge_enabled(inputs, _INPUT_TOP_ENABLED, bool(surface_top))
+    _set_edge_enabled(inputs, _INPUT_BOTTOM_ENABLED, bool(surface_bottom))
 
 
 def _read_enabled_edge_values(inputs, require_material=False):
@@ -1299,12 +1764,9 @@ def _read_enabled_edge_values(inputs, require_material=False):
     }
     values = {}
     for attr_key, (enabled_id, dropdown_id) in mapping.items():
-        if not _is_edge_enabled(inputs, enabled_id):
-            values[attr_key] = ""
-            continue
         edge_id = _read_edge_dropdown_value(inputs, dropdown_id)
-        if require_material and not edge_id:
-            raise RuntimeError("Für aktivierte Bekantung muss ein Kantenmaterial gewählt werden.")
+        if require_material and edge_id == CUSTOM_TEXT_VALUE:
+            _require_custom_text_for_attr(inputs, attr_key)
         values[attr_key] = edge_id
     return values
 
@@ -1328,33 +1790,48 @@ def _read_edge_values_for_mode(inputs, require_material=False):
     return _read_enabled_edge_values(inputs, require_material=require_material)
 
 
-def _read_surface_texts_for_mode(inputs):
+def _read_surface_values_for_mode(inputs):
     mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-    if mode == "none":
-        return "", ""
     if mode == "all":
-        text = _read_string_input(inputs, _INPUT_SURFACE_ALL_TEXT, "").strip()
-        return text, text
-    top_text = _read_string_input(inputs, _INPUT_TOP_TEXT, "").strip() if _is_edge_enabled(inputs, _INPUT_TOP_ENABLED) else ""
-    bottom_text = (
-        _read_string_input(inputs, _INPUT_BOTTOM_TEXT, "").strip()
-        if _is_edge_enabled(inputs, _INPUT_BOTTOM_ENABLED)
-        else ""
-    )
-    return top_text, bottom_text
+        value = _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE)
+        return {ATTR_KEY_SURFACE_TOP: value, ATTR_KEY_SURFACE_BOTTOM: value}
+    if mode != "individual":
+        return {ATTR_KEY_SURFACE_TOP: "", ATTR_KEY_SURFACE_BOTTOM: ""}
+    return {
+        ATTR_KEY_SURFACE_TOP: _read_surface_dropdown_value(inputs, _INPUT_TOP_SURFACE),
+        ATTR_KEY_SURFACE_BOTTOM: _read_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE),
+    }
 
 
-def _apply_edge_appearance_preview(inputs):
-    body = _read_selected_body(inputs)
-    if not body:
-        return
-    try:
-        side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
-        if not side_faces:
-            return
-        _apply_edge_appearance_from_resolved_faces(body, side_faces, _read_edge_values_for_mode(inputs))
-    except Exception as exc:
-        print(f"Properties: Kanten-Preview fehlgeschlagen: {exc}")
+def _require_custom_text_for_attr(inputs, attr_key):
+    text = _read_custom_text_for_attr(inputs, attr_key)
+    if not text:
+        raise RuntimeError("Für Auswahl 'Text' muss ein Freitext eingetragen werden.")
+    return text
+
+
+def _read_custom_text_for_attr(inputs, attr_key):
+    if (
+        attr_key in (ATTR_KEY_SURFACE_TOP, ATTR_KEY_SURFACE_BOTTOM)
+        and _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none") == "all"
+    ):
+        return _read_string_input(inputs, _INPUT_ALL_SURFACE_TEXT, "").strip()
+    input_id = _custom_text_input_for_attr(attr_key)
+    if not input_id:
+        return ""
+    return _read_string_input(inputs, input_id, "").strip()
+
+
+def _custom_text_input_for_attr(attr_key):
+    mapping = {
+        ATTR_KEY_EDGE_FRONT: _INPUT_EDGE_FRONT_TEXT,
+        ATTR_KEY_EDGE_BACK: _INPUT_EDGE_BACK_TEXT,
+        ATTR_KEY_EDGE_LEFT: _INPUT_EDGE_LEFT_TEXT,
+        ATTR_KEY_EDGE_RIGHT: _INPUT_EDGE_RIGHT_TEXT,
+        ATTR_KEY_SURFACE_TOP: _INPUT_TOP_SURFACE_TEXT,
+        ATTR_KEY_SURFACE_BOTTOM: _INPUT_BOTTOM_SURFACE_TEXT,
+    }
+    return mapping.get(attr_key, "")
 
 
 def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
@@ -1364,12 +1841,14 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
         ATTR_KEY_EDGE_LEFT: "left",
         ATTR_KEY_EDGE_RIGHT: "right",
     }
+    base_appearance = _body_material_appearance(body)
     for attr_key, side in attr_to_side.items():
-        edge_id = str(edge_values.get(attr_key, "") or "").strip()
-        if not edge_id:
-            continue
         face = side_faces.get(side)
         if not face:
+            continue
+        edge_id = str(edge_values.get(attr_key, "") or "").strip()
+        if not edge_id or edge_id == CUSTOM_TEXT_VALUE:
+            _apply_face_appearance_or_raise(face, base_appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden")
             continue
         edge_entry = _edge_by_id.get(edge_id)
         if not edge_entry:
@@ -1383,6 +1862,191 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
             face.appearance = appearance
         except Exception as exc:
             raise RuntimeError(f"Kanten-Appearance konnte nicht gesetzt werden: {exc}") from exc
+
+
+def _reset_canonical_side_face_appearances(body):
+    appearance = _body_material_appearance(body)
+    for face in _detect_canonical_side_faces(body).values():
+        _apply_face_appearance_or_raise(face, appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden")
+
+
+def _write_or_clear_body_attribute(body, attr_key, value):
+    text = str(value or "").strip()
+    if text:
+        _write_body_attribute_or_raise(body, attr_key, text)
+    else:
+        _clear_body_attribute_or_raise(body, attr_key)
+
+
+def _validate_custom_text_values(inputs, values):
+    for attr_key, value in (values or {}).items():
+        if value == CUSTOM_TEXT_VALUE:
+            _require_custom_text_for_attr(inputs, attr_key)
+
+
+def _write_custom_text_attributes(body, inputs, values):
+    for attr_key, custom_attr_key in _custom_text_attr_mapping().items():
+        if (values or {}).get(attr_key) == CUSTOM_TEXT_VALUE:
+            _write_body_attribute_or_raise(body, custom_attr_key, _require_custom_text_for_attr(inputs, attr_key))
+        else:
+            _clear_body_attribute_or_raise(body, custom_attr_key)
+
+
+def _write_all_mode_edge_attributes(body, inputs):
+    text = _all_mode_surface_export_name(inputs)
+    edge_attrs = (
+        (ATTR_KEY_EDGE_FRONT, ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT),
+        (ATTR_KEY_EDGE_BACK, ATTR_KEY_EDGE_BACK_CUSTOM_TEXT),
+        (ATTR_KEY_EDGE_LEFT, ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT),
+        (ATTR_KEY_EDGE_RIGHT, ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT),
+    )
+    for edge_attr, custom_attr in edge_attrs:
+        if text:
+            _write_body_attribute_or_raise(body, edge_attr, CUSTOM_TEXT_VALUE)
+            _write_body_attribute_or_raise(body, custom_attr, text)
+        else:
+            _clear_body_attribute_or_raise(body, edge_attr)
+            _clear_body_attribute_or_raise(body, custom_attr)
+
+
+def _all_mode_surface_export_name(inputs):
+    surface_id = _read_surface_dropdown_value(inputs, _INPUT_ALL_SURFACE)
+    if not surface_id:
+        return ""
+    if surface_id == CUSTOM_TEXT_VALUE:
+        return _require_custom_text_for_attr(inputs, ATTR_KEY_SURFACE_TOP)
+    surface_entry = _surface_by_id.get(surface_id)
+    if not surface_entry:
+        raise RuntimeError(f"Oberfläche '{surface_id}' ist nicht im Katalog vorhanden.")
+    return str(surface_entry.name or "").strip()
+
+
+def _has_any_surface_value(surface_values):
+    return any(str(value or "").strip() for value in (surface_values or {}).values())
+
+
+def _custom_text_attr_mapping():
+    return {
+        ATTR_KEY_EDGE_FRONT: ATTR_KEY_EDGE_FRONT_CUSTOM_TEXT,
+        ATTR_KEY_EDGE_BACK: ATTR_KEY_EDGE_BACK_CUSTOM_TEXT,
+        ATTR_KEY_EDGE_LEFT: ATTR_KEY_EDGE_LEFT_CUSTOM_TEXT,
+        ATTR_KEY_EDGE_RIGHT: ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT,
+        ATTR_KEY_SURFACE_TOP: ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT,
+        ATTR_KEY_SURFACE_BOTTOM: ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT,
+    }
+
+
+def _apply_surface_appearance_from_body_faces(
+    body, surface_values, include_edges=False, allow_missing_empty_faces=False
+):
+    face_map = _detect_top_bottom_faces(body)
+    base_appearance = _body_material_appearance(body)
+    has_surface_value = _has_any_surface_value(surface_values)
+    mapping = {
+        ATTR_KEY_SURFACE_TOP: "top",
+        ATTR_KEY_SURFACE_BOTTOM: "bottom",
+    }
+    for attr_key, face_key in mapping.items():
+        surface_id = str(surface_values.get(attr_key, "") or "").strip()
+        face = face_map.get(face_key)
+        if not face:
+            if allow_missing_empty_faces and not has_surface_value:
+                continue
+            raise RuntimeError(f"Fläche für Oberfläche '{face_key}' konnte nicht bestimmt werden.")
+        if not surface_id or surface_id == CUSTOM_TEXT_VALUE:
+            _apply_face_appearance_or_raise(face, base_appearance, "Oberflächen-Appearance konnte nicht zurückgesetzt werden")
+            continue
+        surface_entry = _surface_by_id.get(surface_id)
+        if not surface_entry:
+            raise RuntimeError(f"Oberfläche '{surface_id}' ist nicht im Katalog vorhanden.")
+        appearance = _find_appearance_by_name(surface_entry.appearance_name)
+        if not appearance:
+            raise RuntimeError(
+                f"Appearance '{surface_entry.appearance_name}' aus Oberfläche '{surface_id}' wurde nicht gefunden."
+            )
+        _apply_face_appearance_or_raise(face, appearance, "Oberflächen-Appearance konnte nicht gesetzt werden")
+
+    if include_edges:
+        all_surface_id = str(surface_values.get(ATTR_KEY_SURFACE_TOP, "") or "").strip()
+        appearance = _surface_appearance_or_base(all_surface_id, base_appearance)
+        for face in _detect_canonical_side_faces(body).values():
+            _apply_face_appearance_or_raise(face, appearance, "Kanten-Oberflächen-Appearance konnte nicht gesetzt werden")
+
+
+def _apply_global_surface_appearance_to_body_faces(body, surface_values):
+    surface_id = str((surface_values or {}).get(ATTR_KEY_SURFACE_TOP, "") or "").strip()
+    if not surface_id:
+        surface_id = str((surface_values or {}).get(ATTR_KEY_SURFACE_BOTTOM, "") or "").strip()
+    appearance = _surface_appearance_or_base(surface_id, _body_material_appearance(body))
+    faces = getattr(body, "faces", None)
+    if not faces:
+        raise RuntimeError("Globale Oberfläche konnte nicht gesetzt werden: Body hat keine Faces.")
+    for index in range(faces.count):
+        face = adsk.fusion.BRepFace.cast(faces.item(index))
+        if face:
+            _apply_face_appearance_or_raise(face, appearance, "Globale Oberflächen-Appearance konnte nicht gesetzt werden")
+
+
+def _surface_appearance_or_base(surface_id, base_appearance):
+    if not surface_id or surface_id == CUSTOM_TEXT_VALUE:
+        return base_appearance
+    surface_entry = _surface_by_id.get(surface_id)
+    if not surface_entry:
+        raise RuntimeError(f"Oberfläche '{surface_id}' ist nicht im Katalog vorhanden.")
+    appearance = _find_appearance_by_name(surface_entry.appearance_name)
+    if not appearance:
+        raise RuntimeError(
+            f"Appearance '{surface_entry.appearance_name}' aus Oberfläche '{surface_id}' wurde nicht gefunden."
+        )
+    return appearance
+
+
+def _body_material_appearance(body):
+    material_id = str(_get_attr(body, ATTR_KEY_MATERIAL_ID, "") or "").strip()
+    entry = _material_by_id.get(material_id)
+    if entry and entry.appearance_name:
+        appearance = _find_appearance_by_name(entry.appearance_name)
+        if appearance:
+            return appearance
+    try:
+        target = _resolve_attr_target(body)
+        appearance = getattr(target, "appearance", None) if target else None
+        if appearance:
+            return appearance
+    except Exception:
+        pass
+    raise RuntimeError("Material-Appearance zum Zurücksetzen der Oberfläche wurde nicht gefunden.")
+
+
+def _apply_face_appearance_or_raise(face, appearance, error_prefix):
+    try:
+        face.appearance = appearance
+    except Exception as exc:
+        raise RuntimeError(f"{error_prefix}: {exc}") from exc
+
+
+def _detect_top_bottom_faces(body):
+    axis_info = _edge_axis_info(body)
+    if not axis_info:
+        return {}
+    best = {}
+    faces = getattr(body, "faces", None)
+    if not faces:
+        return best
+    for i in range(faces.count):
+        face = adsk.fusion.BRepFace.cast(faces.item(i))
+        if not face:
+            continue
+        normal = _face_normal(face)
+        dominant_idx, dominant_value = _dominant_axis(normal)
+        if dominant_idx != axis_info["thickness_idx"] or abs(dominant_value) < 0.9:
+            continue
+        key = "top" if dominant_value >= 0 else "bottom"
+        score = abs(dominant_value) + float(getattr(face, "area", 0.0))
+        existing = best.get(key)
+        if not existing or score > existing[0]:
+            best[key] = (score, face)
+    return {key: value[1] for key, value in best.items()}
 
 
 def _resolve_side_faces_from_front_selection(inputs, body):
@@ -1798,7 +2462,7 @@ def _read_selected_body(inputs):
 
         native = adsk.fusion.BRepBody.cast(getattr(body, "nativeObject", None))
         resolved = native if native else body
-        _remember_body_selection(resolved)
+        _remember_body_selection(resolved, body)
         return resolved
     except Exception as exc:
         print(f"Properties: Körperauswahl konnte nicht gelesen werden: {exc}")
@@ -2016,7 +2680,12 @@ def _type_label(type_id):
 
 
 def _sorted_types():
-    return sorted(get_catalog_types(), key=lambda type_id: _type_label(type_id).lower())
+    type_ids = [
+        type_id
+        for type_id in get_catalog_types()
+        if get_type_capabilities(type_id).get("supports_body_material", True)
+    ]
+    return sorted(type_ids, key=lambda type_id: _type_label(type_id).lower())
 
 
 def _get_or_create_panel(workspace):

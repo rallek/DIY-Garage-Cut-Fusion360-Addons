@@ -9,6 +9,7 @@ from .type_config import (
     get_csv_fields,
     get_csv_field_keys,
     get_type_default_properties,
+    get_type_capabilities,
     get_type_definition,
     get_type_fields,
     get_type_label,

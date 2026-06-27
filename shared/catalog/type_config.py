@@ -11,6 +11,13 @@ _DEFAULT_TYPE_CONFIG = {
         {
             "id": "sheet",
             "labels": {"de": "Platte", "en": "Sheet"},
+            "capabilities": {
+                "supports_body_material": True,
+                "supports_edges": True,
+                "supports_surface": True,
+                "surface_entry_mode": "individual",
+                "edge_entry_mode": "individual",
+            },
             "fields": [
                 {
                     "key": "sheet_default_trim_allowance",
@@ -56,11 +63,25 @@ _DEFAULT_TYPE_CONFIG = {
         {
             "id": "bar",
             "labels": {"de": "Stab", "en": "Bar"},
+            "capabilities": {
+                "supports_body_material": True,
+                "supports_edges": False,
+                "supports_surface": True,
+                "surface_entry_mode": "global",
+                "edge_entry_mode": "none",
+            },
             "fields": [],
         },
         {
             "id": "edge",
             "labels": {"de": "Kante", "en": "Edge"},
+            "capabilities": {
+                "supports_body_material": False,
+                "supports_edges": False,
+                "supports_surface": False,
+                "surface_entry_mode": "none",
+                "edge_entry_mode": "none",
+            },
             "fields": [
                 {
                     "key": "edge_thickness",
@@ -80,16 +101,49 @@ _DEFAULT_TYPE_CONFIG = {
         {
             "id": "profile",
             "labels": {"de": "Profil", "en": "Profile"},
+            "capabilities": {
+                "supports_body_material": True,
+                "supports_edges": False,
+                "supports_surface": True,
+                "surface_entry_mode": "global",
+                "edge_entry_mode": "none",
+            },
+            "fields": [],
+        },
+        {
+            "id": "surface",
+            "labels": {"de": "Oberfläche", "en": "Surface"},
+            "capabilities": {
+                "supports_body_material": False,
+                "supports_edges": False,
+                "supports_surface": False,
+                "surface_entry_mode": "none",
+                "edge_entry_mode": "none",
+            },
             "fields": [],
         },
         {
             "id": "hardware",
             "labels": {"de": "Beschlag", "en": "Hardware"},
+            "capabilities": {
+                "supports_body_material": True,
+                "supports_edges": False,
+                "supports_surface": False,
+                "surface_entry_mode": "none",
+                "edge_entry_mode": "none",
+            },
             "fields": [],
         },
         {
             "id": "consumable",
             "labels": {"de": "Verbrauchsmaterial", "en": "Consumable"},
+            "capabilities": {
+                "supports_body_material": True,
+                "supports_edges": False,
+                "supports_surface": False,
+                "surface_entry_mode": "none",
+                "edge_entry_mode": "none",
+            },
             "fields": [],
         },
     ],
@@ -215,6 +269,38 @@ def _normalize_field(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return result
 
 
+def _normalize_capabilities(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        raw = {}
+
+    surface_entry_mode = str(raw.get("surface_entry_mode", "none") or "none").strip().lower()
+    if surface_entry_mode not in ("none", "global", "individual"):
+        surface_entry_mode = "none"
+
+    edge_entry_mode = str(raw.get("edge_entry_mode", "none") or "none").strip().lower()
+    if edge_entry_mode not in ("none", "all", "individual", "both"):
+        edge_entry_mode = "none"
+
+    supports_surface = bool(raw.get("supports_surface", surface_entry_mode != "none"))
+    supports_edges = bool(raw.get("supports_edges", edge_entry_mode != "none"))
+    if not supports_surface:
+        surface_entry_mode = "none"
+    elif surface_entry_mode == "none":
+        surface_entry_mode = "global"
+    if not supports_edges:
+        edge_entry_mode = "none"
+    elif edge_entry_mode == "none":
+        edge_entry_mode = "individual"
+
+    return {
+        "supports_body_material": bool(raw.get("supports_body_material", True)),
+        "supports_edges": supports_edges,
+        "supports_surface": supports_surface,
+        "surface_entry_mode": surface_entry_mode,
+        "edge_entry_mode": edge_entry_mode,
+    }
+
+
 def _normalize_type(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(raw, dict):
         return None
@@ -239,6 +325,7 @@ def _normalize_type(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {
         "id": type_id,
         "labels": {"de": str(labels.get("de", type_id)), "en": str(labels.get("en", type_id))},
+        "capabilities": _normalize_capabilities(raw.get("capabilities", {})),
         "fields": fields,
     }
 
@@ -312,6 +399,13 @@ def get_type_fields(type_id: str) -> List[Dict[str, Any]]:
     if not type_def:
         return []
     return list(type_def.get("fields", []))
+
+
+def get_type_capabilities(type_id: str) -> Dict[str, Any]:
+    type_def = get_type_definition(type_id)
+    if not type_def:
+        return _normalize_capabilities({})
+    return dict(type_def.get("capabilities") or _normalize_capabilities({}))
 
 
 def get_type_label(type_id: str, lang: str = "de") -> str:

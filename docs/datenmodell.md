@@ -13,6 +13,7 @@ edge
 profile
 hardware
 consumable
+surface
 ```
 
 ## Basisfelder
@@ -92,8 +93,14 @@ edge_front
 edge_back
 edge_left
 edge_right
-surface_top_text
-surface_bottom_text
+surface_top
+surface_bottom
+edge_front_custom_text
+edge_back_custom_text
+edge_left_custom_text
+edge_right_custom_text
+surface_top_custom_text
+surface_bottom_custom_text
 
 notes
 
@@ -185,8 +192,25 @@ edge_left_name
 edge_left_thickness_mm
 edge_right_name
 edge_right_thickness_mm
-surface_top_text
-surface_bottom_text
+surface_top_name
+surface_bottom_name
+notes
 ```
+
+## Oberflächen und Fertigungshinweise
+
+`surface_top` und `surface_bottom` verweisen auf Katalogeinträge vom Typ `surface`.
+
+Für Kanten und Oberflächen kann statt eines Katalogeintrags der Sonderwert `__text__` gespeichert werden. Dann muss das zugehörige `*_custom_text`-Attribut gefüllt sein. Beim CSV-Export wird dieser Freitext als Name ausgegeben. Bei Kanten ist die exportierte Dicke in diesem Fall `0`.
+
+Im Modus `Alle gemeinsam` wird eine gemeinsame Oberflächenauswahl auf `surface_top` und `surface_bottom` geschrieben. Für die vier Kanten wird derselbe Name als Freitext-Kante gespeichert; die Kantenstärke bleibt dabei `0`.
+
+Der CSV-Export transportiert bewusst das fachliche Ergebnis, nicht den UI-Modus. Vier identische Freitext-Kanten mit Dicke `0` sind deshalb im CSV nicht von einer Eingabe über `Alle gemeinsam` zu unterscheiden.
+
+Für Materialtypen mit Oberflächenunterstützung, aber ohne Kantenunterstützung, wird die gemeinsame Oberfläche im Dialog ebenfalls über `surface_top` und `surface_bottom` gespeichert. Die Modell-Visualisierung behandelt diese Auswahl als globale Oberfläche und setzt die Appearance auf alle Faces des Bodys, nicht nur auf erkannte Ober-/Unterseiten.
+
+Breaking Change zu Issue #16: Alte Attribute wie `surface_top_text`, `surface_bottom_text` oder `finish_*` sind nicht mehr Teil des Datenvertrags und werden nicht migriert oder als Fallback gelesen. Bestehende Testmodelle müssen mit den neuen Feldern erneut gespeichert werden.
+
+`notes` ist ein separater freier Fertigungshinweis und gehört nicht zur strukturierten Oberflächenauswahl.
 
 `material_name` ist für nachgelagerte Zuschnittsysteme gedacht und kann über `csv_material_name_mode` vom reinen Materialnamen auf eine dimensionsangereicherte Bezeichnung umgestellt werden.

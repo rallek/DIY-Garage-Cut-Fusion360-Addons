@@ -7,6 +7,13 @@
         "de": "Platte",
         "en": "Sheet"
       },
+      "capabilities": {
+        "supports_body_material": true,
+        "supports_edges": true,
+        "supports_surface": true,
+        "surface_entry_mode": "individual",
+        "edge_entry_mode": "individual"
+      },
       "fields": [
         {
           "key": "sheet_default_trim_allowance",
@@ -64,6 +71,13 @@
         "de": "Stab",
         "en": "Bar"
       },
+      "capabilities": {
+        "supports_body_material": true,
+        "supports_edges": false,
+        "supports_surface": true,
+        "surface_entry_mode": "global",
+        "edge_entry_mode": "none"
+      },
       "fields": []
     },
     {
@@ -71,6 +85,13 @@
       "labels": {
         "de": "Kante",
         "en": "Edge"
+      },
+      "capabilities": {
+        "supports_body_material": false,
+        "supports_edges": false,
+        "supports_surface": false,
+        "surface_entry_mode": "none",
+        "edge_entry_mode": "none"
       },
       "fields": [
         {
@@ -97,6 +118,28 @@
         "de": "Profil",
         "en": "Profile"
       },
+      "capabilities": {
+        "supports_body_material": true,
+        "supports_edges": false,
+        "supports_surface": true,
+        "surface_entry_mode": "global",
+        "edge_entry_mode": "none"
+      },
+      "fields": []
+    },
+    {
+      "id": "surface",
+      "labels": {
+        "de": "Oberfläche",
+        "en": "Surface"
+      },
+      "capabilities": {
+        "supports_body_material": false,
+        "supports_edges": false,
+        "supports_surface": false,
+        "surface_entry_mode": "none",
+        "edge_entry_mode": "none"
+      },
       "fields": []
     },
     {
@@ -105,6 +148,13 @@
         "de": "Beschlag",
         "en": "Hardware"
       },
+      "capabilities": {
+        "supports_body_material": true,
+        "supports_edges": false,
+        "supports_surface": false,
+        "surface_entry_mode": "none",
+        "edge_entry_mode": "none"
+      },
       "fields": []
     },
     {
@@ -112,6 +162,13 @@
       "labels": {
         "de": "Verbrauchsmaterial",
         "en": "Consumable"
+      },
+      "capabilities": {
+        "supports_body_material": true,
+        "supports_edges": false,
+        "supports_surface": false,
+        "surface_entry_mode": "none",
+        "edge_entry_mode": "none"
       },
       "fields": []
     }
