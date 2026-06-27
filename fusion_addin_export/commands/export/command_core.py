@@ -40,15 +40,79 @@ _export_settings_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "export_config.json")
 )
 _export_settings_cache = None
+_INPUT_SCOPE = "diygc_export_scope"
+_INPUT_COMPONENTS = "diygc_export_components"
 
 
 class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
         cmd = event_args.command
+        inputs = cmd.commandInputs
+
+        scope = inputs.addDropDownCommandInput(
+            _INPUT_SCOPE,
+            "Scope",
+            adsk.core.DropDownStyles.TextListDropDownStyle,
+        )
+        scope.listItems.add("Alle sichtbaren Bodies", True)
+        scope.listItems.add("Aktive Komponente", False)
+        scope.listItems.add("Ausgewählte Komponente(n)", False)
+
+        components = inputs.addSelectionInput(
+            _INPUT_COMPONENTS,
+            "Komponenten",
+            "Eine oder mehrere Komponenten auswählen",
+        )
+        for selection_filter in ("Occurrences", "RootComponents", "Components"):
+            try:
+                components.addSelectionFilter(selection_filter)
+            except Exception:
+                pass
+        components.setSelectionLimits(0, 0)
+        components.isVisible = False
+        try:
+            components.isUseCurrentSelections = False
+        except Exception:
+            pass
+
+        on_input_changed = _InputChangedHandler()
+        cmd.inputChanged.add(on_input_changed)
+        _handlers.append(on_input_changed)
+
+        on_validate = _ValidateInputsHandler()
+        cmd.validateInputs.add(on_validate)
+        _handlers.append(on_validate)
+
         on_execute = _CommandExecuteHandler()
         cmd.execute.add(on_execute)
         _handlers.append(on_execute)
+
+
+class _InputChangedHandler(adsk.core.InputChangedEventHandler):
+    def notify(self, args):
+        try:
+            event_args = adsk.core.InputChangedEventArgs.cast(args)
+            changed = event_args.input
+            if not changed or changed.id != _INPUT_SCOPE:
+                return
+            command = event_args.firingEvent.sender
+            inputs = command.commandInputs if command else None
+            _update_component_selection_visibility(inputs)
+        except Exception as exc:
+            print(f"CSV-Export: InputChanged-Fehler: {exc}")
+
+
+class _ValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
+    def notify(self, args):
+        try:
+            event_args = adsk.core.ValidateInputsEventArgs.cast(args)
+            command = event_args.firingEvent.sender if event_args else None
+            inputs = command.commandInputs if command else None
+            if _read_scope_mode(inputs) == "selected_components":
+                event_args.areInputsValid = bool(_read_selected_component_entities(inputs))
+        except Exception as exc:
+            print(f"CSV-Export: ValidateInputs-Fehler: {exc}")
 
 
 class _CommandExecuteHandler(adsk.core.CommandEventHandler):
@@ -60,19 +124,27 @@ class _CommandExecuteHandler(adsk.core.CommandEventHandler):
             return
 
         try:
-            _run_export_mode(app, ui)
+            event_args = adsk.core.CommandEventArgs.cast(args)
+            command = event_args.command if event_args else None
+            inputs = command.commandInputs if command else None
+            _run_export_mode(app, ui, inputs)
         except Exception as exc:
             print(f"Export-Command-Fehler: {exc}")
             ui.messageBox(f"CSV-Export fehlgeschlagen:\n{exc}")
 
 
-def _run_export_mode(app, ui):
+def _run_export_mode(app, ui, inputs=None):
     global _ui_lang
     _ui_lang = _detect_ui_lang()
 
     from commands.validate import command_core as validate_core
 
-    analysis = validate_core.analyze_visible_bodies(app)
+    scope = _build_analysis_scope(validate_core, inputs)
+    if scope.mode == validate_core.SCOPE_SELECTED_COMPONENTS and not scope.selected_entities:
+        ui.messageBox("Bitte mindestens eine Komponente auswählen.")
+        return
+
+    analysis = validate_core.analyze_visible_bodies(app, scope)
     if analysis.ready_count < 1:
         ui.messageBox(
             _build_pre_export_message(analysis, can_export=False),
@@ -107,6 +179,7 @@ def _run_export_mode(app, ui):
     _write_csv(export_path, rows)
     ui.messageBox(
         "CSV-Export abgeschlossen.\n"
+        f"Scope: {analysis.scope_label}\n"
         f"Datei: {export_path}\n"
         f"Exportiert: {len(rows)}\n"
         f"Ausgeschlossen: {analysis.excluded_count}\n"
@@ -119,6 +192,7 @@ def _build_pre_export_message(analysis, can_export):
     lines = [
         "Pruefung vor dem CSV-Export",
         "",
+        f"Scope: {analysis.scope_label}",
         f"Exportbereit: {analysis.ready_count}",
         f"Ausgeschlossen: {analysis.excluded_count}",
         f"Mit fehlenden/inkonsistenten Angaben: {analysis.issue_count}",
@@ -137,6 +211,59 @@ def _build_pre_export_message(analysis, can_export):
     else:
         lines.append("Es gibt keine exportbereiten Bodies. Es wird keine CSV geschrieben.")
     return "\n".join(lines)
+
+
+def _build_analysis_scope(validate_core, inputs):
+    mode = _read_scope_mode(inputs)
+    selected = _read_selected_component_entities(inputs) if mode == validate_core.SCOPE_SELECTED_COMPONENTS else []
+    return validate_core._BodyScope(mode, selected)
+
+
+def _read_scope_mode(inputs):
+    if not inputs:
+        return "all_visible"
+    try:
+        dropdown = adsk.core.DropDownCommandInput.cast(inputs.itemById(_INPUT_SCOPE))
+        selected = dropdown.selectedItem if dropdown else None
+        name = str(selected.name or "").strip() if selected else ""
+        if name == "Aktive Komponente":
+            return "active_component"
+        if name == "Ausgewählte Komponente(n)":
+            return "selected_components"
+    except Exception as exc:
+        print(f"CSV-Export: Scope konnte nicht gelesen werden: {exc}")
+    return "all_visible"
+
+
+def _read_selected_component_entities(inputs):
+    entities = []
+    if not inputs:
+        return entities
+    try:
+        selection = adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_COMPONENTS))
+        if not selection:
+            return entities
+        for index in range(selection.selectionCount):
+            selected = selection.selection(index)
+            entity = selected.entity if selected else None
+            if not entity:
+                continue
+            native = getattr(entity, "nativeObject", None)
+            entities.append(native if native else entity)
+    except Exception as exc:
+        print(f"CSV-Export: Komponentenauswahl konnte nicht gelesen werden: {exc}")
+    return entities
+
+
+def _update_component_selection_visibility(inputs):
+    if not inputs:
+        return
+    try:
+        components = adsk.core.SelectionCommandInput.cast(inputs.itemById(_INPUT_COMPONENTS))
+        if components:
+            components.isVisible = _read_scope_mode(inputs) == "selected_components"
+    except Exception as exc:
+        print(f"CSV-Export: Komponentenauswahl konnte nicht aktualisiert werden: {exc}")
 
 
 def _pick_export_path(app, ui):
