@@ -40,6 +40,7 @@ ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT = "edge_right_custom_text"
 ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT = "surface_top_custom_text"
 ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT = "surface_bottom_custom_text"
 ATTR_KEY_NOTES = "notes"
+ATTR_KEY_EXCLUDE_FROM_EXPORT = "exclude_from_export"
 CUSTOM_TEXT_VALUE = "__text__"
 _TYPE_FIELD_TRIM_ALLOWANCE = "sheet_default_trim_allowance"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
@@ -80,6 +81,7 @@ _INPUT_BOTTOM_SURFACE = "diygc_bottom_surface"
 _INPUT_BOTTOM_SURFACE_TEXT = "diygc_bottom_surface_text"
 _INPUT_SWAP_LEFT_RIGHT = "diygc_swap_left_right"
 _INPUT_SWAP_SURFACES = "diygc_swap_surfaces"
+_INPUT_EXCLUDE_FROM_EXPORT = "diygc_exclude_from_export"
 _INPUT_NOTES_HEADER = "diygc_notes_header"
 _INPUT_NOTES = "diygc_notes"
 _INPUT_APPLY = "diygc_apply"
@@ -149,6 +151,7 @@ _STRINGS = {
         "bottom_enabled": "Unterseite bearbeiten",
         "bottom_text": "Oberfläche unten",
         "swap_surfaces": "Oben/Unten tauschen",
+        "exclude_from_export": "Vom Export ausschließen",
         "notes_section": "Fertigungshinweise",
         "surface_none": "(Keine Oberfläche)",
         "notes": "Fertigungshinweise",
@@ -196,6 +199,7 @@ _STRINGS = {
         "bottom_enabled": "Edit bottom side",
         "bottom_text": "Bottom surface",
         "swap_surfaces": "Swap top/bottom",
+        "exclude_from_export": "Exclude from export",
         "notes_section": "Production notes",
         "surface_none": "(No surface)",
         "notes": "Production notes",
@@ -371,6 +375,9 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         )
         bottom_surface_text = inputs.addStringValueInput(_INPUT_BOTTOM_SURFACE_TEXT, _t("custom_text_value"), "")
         swap_surfaces = inputs.addBoolValueInput(_INPUT_SWAP_SURFACES, _t("swap_surfaces"), False, "", False)
+        exclude_from_export = inputs.addBoolValueInput(
+            _INPUT_EXCLUDE_FROM_EXPORT, _t("exclude_from_export"), True, "", False
+        )
         notes_header = inputs.addTextBoxCommandInput(_INPUT_NOTES_HEADER, "", _t("notes_section"), 1, True)
         notes_header.isFullWidth = True
         notes = inputs.addTextBoxCommandInput(_INPUT_NOTES, _t("notes"), "", 4, False)
@@ -624,6 +631,11 @@ def _save_properties_from_inputs(inputs, ui):
 
     notes = _read_string_input(inputs, _INPUT_NOTES, "").strip()
     _write_or_clear_body_attribute(body, ATTR_KEY_NOTES, notes)
+    _write_body_attribute_or_raise(
+        body,
+        ATTR_KEY_EXCLUDE_FROM_EXPORT,
+        "true" if _read_bool_input(inputs, _INPUT_EXCLUDE_FROM_EXPORT, False) else "false",
+    )
 
     side_faces = None
     edge_values = (
@@ -852,6 +864,7 @@ def _refresh_inputs_from_selected_body(inputs):
         _set_surface_dropdown_value(inputs, _INPUT_BOTTOM_SURFACE, "")
         _clear_custom_text_inputs(inputs)
         _set_input_value(inputs, _INPUT_NOTES, "")
+        _set_bool_input_value(inputs, _INPUT_EXCLUDE_FROM_EXPORT, False)
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_FRONT, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_BACK, "")
         _set_edge_dropdown_value(inputs, _INPUT_EDGE_LEFT, "")
@@ -917,6 +930,7 @@ def _refresh_inputs_from_selected_body(inputs):
         str(_get_attr(body, ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT, "") or "").strip(),
     )
     _set_input_value(inputs, _INPUT_NOTES, str(_get_attr(body, ATTR_KEY_NOTES, "") or "").strip())
+    _set_bool_input_value(inputs, _INPUT_EXCLUDE_FROM_EXPORT, _is_truthy_attr(_get_attr(body, ATTR_KEY_EXCLUDE_FROM_EXPORT, "")))
     _set_input_value(inputs, _INPUT_SURFACE_ALL_TEXT, "")
     _sync_edge_controls_from_body_attributes(inputs, body)
     _set_edge_controls_for_material(inputs, material_id or None)
@@ -960,6 +974,7 @@ def _set_main_controls_visible(inputs, visible):
         _INPUT_TRIM_ALLOWANCE,
         _INPUT_GRAIN_DIRECTION,
         _INPUT_EDGES_ENABLED,
+        _INPUT_EXCLUDE_FROM_EXPORT,
     )
     for input_id in main_ids:
         item = inputs.itemById(input_id)
@@ -2601,6 +2616,29 @@ def _read_string_input(inputs, input_id, fallback):
         return value if value else fallback
     except Exception:
         return fallback
+
+
+def _read_bool_input(inputs, input_id, fallback=False):
+    try:
+        item = adsk.core.BoolValueCommandInput.cast(inputs.itemById(input_id))
+        if not item:
+            return fallback
+        return bool(item.value)
+    except Exception:
+        return fallback
+
+
+def _set_bool_input_value(inputs, input_id, value):
+    try:
+        item = adsk.core.BoolValueCommandInput.cast(inputs.itemById(input_id))
+        if item:
+            item.value = bool(value)
+    except Exception as exc:
+        print(f"Properties: Bool-Input '{input_id}' konnte nicht gesetzt werden: {exc}")
+
+
+def _is_truthy_attr(value):
+    return str(value or "").strip().lower() in ("true", "1", "yes", "ja", "on")
 
 
 def _set_input_value(inputs, input_id, value):

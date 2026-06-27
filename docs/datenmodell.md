@@ -107,6 +107,8 @@ notes
 exclude_from_export
 ```
 
+`exclude_from_export=true` markiert einen Body als nicht exportrelevant. Der CSV-Export überspringt solche Bodies vollständig; leere Werte oder `false` werden normal exportiert.
+
 ---
 
 # front_reference

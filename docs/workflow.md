@@ -55,6 +55,8 @@ Nicht relevante Bodies markieren:
 - Vorrichtungen
 - temporäre Bodies
 
+Im Properties-Addin dafür `Vom Export ausschließen` aktivieren. Der CSV-Export schreibt diese Bodies nicht in die Ausgabedatei.
+
 ---
 
 # Analyse

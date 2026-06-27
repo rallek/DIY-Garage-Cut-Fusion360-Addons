@@ -25,6 +25,7 @@ _ATTR_KEY_EDGE_RIGHT_CUSTOM_TEXT = "edge_right_custom_text"
 _ATTR_KEY_SURFACE_TOP_CUSTOM_TEXT = "surface_top_custom_text"
 _ATTR_KEY_SURFACE_BOTTOM_CUSTOM_TEXT = "surface_bottom_custom_text"
 _ATTR_KEY_NOTES = "notes"
+_ATTR_KEY_EXCLUDE_FROM_EXPORT = "exclude_from_export"
 _CUSTOM_TEXT_VALUE = "__text__"
 _TYPE_FIELD_HAS_GRAIN = "sheet_has_grain"
 _TYPE_FIELD_DEFAULT_GRAIN_DIRECTION = "sheet_default_grain_direction"
@@ -78,8 +79,8 @@ def _run_export_mode(app, ui):
     catalog = _try_load_catalog()
     rows = _collect_visible_body_rows(app, catalog)
     if not rows:
-        ui.messageBox("Keine sichtbaren Bodies gefunden. Es wurde keine CSV erzeugt.")
-        print("CSV-Export: Keine sichtbaren Bodies gefunden.")
+        ui.messageBox("Keine exportierbaren sichtbaren Bodies gefunden. Es wurde keine CSV erzeugt.")
+        print("CSV-Export: Keine exportierbaren sichtbaren Bodies gefunden.")
         return
 
     _write_csv(export_path, rows)
@@ -175,6 +176,8 @@ def _append_body_row_if_visible(body, rows, seen_tokens, catalog):
         if token in seen_tokens:
             return
         seen_tokens.add(token)
+        if _is_excluded_from_export(body):
+            return
         rows.append(_body_to_csv_row(body, catalog))
     except Exception as exc:
         if isinstance(exc, RuntimeError):
@@ -232,6 +235,11 @@ def _safe_body_name(body):
     except Exception:
         pass
     return "-"
+
+
+def _is_excluded_from_export(body):
+    value = _resolve_text_attribute_for_export(body, _ATTR_KEY_EXCLUDE_FROM_EXPORT)
+    return str(value or "").strip().lower() in ("true", "1", "yes", "ja", "on")
 
 
 def _get_dimensions_for_export(body, material_type):
