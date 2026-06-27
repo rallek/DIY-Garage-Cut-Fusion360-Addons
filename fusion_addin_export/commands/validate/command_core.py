@@ -187,6 +187,9 @@ def _validate_type_fields(catalog_item, material_type, issues):
         if not key:
             continue
         if key not in properties:
+            issues.append(
+                f"Material '{catalog_item.name}': exportrelevantes Katalogfeld '{_field_label(field)}' fehlt."
+            )
             continue
         value = properties.get(key)
         kind = field.get("kind")
@@ -317,6 +320,15 @@ def _humanize_issue_message(message):
 
 def _attr_label(attr_key):
     return _ATTR_LABELS.get(attr_key, attr_key)
+
+
+def _field_label(field):
+    labels = field.get("labels", {}) if isinstance(field, dict) else {}
+    if isinstance(labels, dict):
+        label = str(labels.get("de", "") or labels.get("en", "") or "").strip()
+        if label:
+            return label
+    return str(field.get("key", "")).strip() if isinstance(field, dict) else ""
 
 
 def _format_result_message(result):

@@ -135,7 +135,7 @@ class Issue20ValidateTests(unittest.TestCase):
             trim_allowance_mm="1.0",
             edge_front="missing.edge",
         )
-        catalog = _FakeCatalog([_FakeCatalogItem("sheet.white", "sheet", "White")])
+        catalog = _FakeCatalog([_sheet_item()])
 
         result = _analyze([body], catalog)
 
@@ -169,7 +169,10 @@ class Issue20ValidateTests(unittest.TestCase):
                     "sheet.white",
                     "sheet",
                     "White",
-                    properties={"sheet_has_grain": "invalid-non-export-value"},
+                    properties={
+                        "sheet_default_trim_allowance": "0.0",
+                        "sheet_has_grain": "invalid-non-export-value",
+                    },
                 )
             ]
         )
@@ -178,6 +181,19 @@ class Issue20ValidateTests(unittest.TestCase):
 
         self.assertEqual(result.issue_count, 0)
         self.assertEqual(result.ready_count, 1)
+
+    def test_missing_csv_catalog_field_blocks_export_readiness(self):
+        body = _body(
+            "side",
+            material_id="sheet.white",
+            trim_allowance_mm="1.0",
+        )
+        catalog = _FakeCatalog([_FakeCatalogItem("sheet.white", "sheet", "White")])
+
+        result = _analyze([body], catalog)
+
+        self.assertEqual(result.issue_count, 1)
+        self.assertIn("exportrelevantes Katalogfeld", "\n".join(result.issues_by_body[0][1]))
 
 
 def _body(name, **attrs):
@@ -191,6 +207,15 @@ def _body(name, **attrs):
 def _analyze(bodies, catalog):
     targets = [validate_core._BodyAnalysisTarget(body, ["Root"]) for body in bodies]
     return validate_core._analyze_bodies(targets, catalog)
+
+
+def _sheet_item():
+    return _FakeCatalogItem(
+        "sheet.white",
+        "sheet",
+        "White",
+        properties={"sheet_default_trim_allowance": "0.0"},
+    )
 
 
 if __name__ == "__main__":
