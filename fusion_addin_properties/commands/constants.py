@@ -78,3 +78,5 @@ _INPUT_EXCLUDE_FROM_EXPORT = "diygc_exclude_from_export"
 _INPUT_NOTES_HEADER = "diygc_notes_header"
 _INPUT_NOTES = "diygc_notes"
 _INPUT_APPLY = "diygc_apply"
+
+__all__ = [name for name in globals() if name.isupper() or name.startswith("_INPUT_")]
