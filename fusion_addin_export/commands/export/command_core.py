@@ -70,6 +70,27 @@ def _run_export_mode(app, ui):
     global _ui_lang
     _ui_lang = _detect_ui_lang()
 
+    from commands.validate import command_core as validate_core
+
+    analysis = validate_core.analyze_visible_bodies(app)
+    if analysis.ready_count < 1:
+        ui.messageBox(
+            _build_pre_export_message(analysis, can_export=False),
+            "DIY Garage Cut Export",
+        )
+        print("CSV-Export: Keine exportbereiten sichtbaren Bodies gefunden.")
+        return
+
+    proceed = ui.messageBox(
+        _build_pre_export_message(analysis, can_export=True),
+        "DIY Garage Cut Export",
+        adsk.core.MessageBoxButtonTypes.OKCancelButtonType,
+    )
+    if proceed != adsk.core.DialogResults.DialogOK:
+        ui.messageBox("CSV-Export abgebrochen. Es wurde keine Datei geschrieben.")
+        print("CSV-Export: Vom Nutzer nach Analyse abgebrochen.")
+        return
+
     export_path = _pick_export_path(app, ui)
     if not export_path:
         ui.messageBox("CSV-Export abgebrochen. Es wurde keine Datei geschrieben.")
@@ -77,15 +98,45 @@ def _run_export_mode(app, ui):
         return
 
     catalog = _try_load_catalog()
-    rows = _collect_visible_body_rows(app, catalog)
+    rows = [_body_to_csv_row(body, catalog) for body in analysis.ready_bodies]
     if not rows:
         ui.messageBox("Keine exportierbaren sichtbaren Bodies gefunden. Es wurde keine CSV erzeugt.")
         print("CSV-Export: Keine exportierbaren sichtbaren Bodies gefunden.")
         return
 
     _write_csv(export_path, rows)
-    ui.messageBox(f"CSV-Export abgeschlossen.\nDatei: {export_path}\nBodies: {len(rows)}")
+    ui.messageBox(
+        "CSV-Export abgeschlossen.\n"
+        f"Datei: {export_path}\n"
+        f"Exportiert: {len(rows)}\n"
+        f"Ausgeschlossen: {analysis.excluded_count}\n"
+        f"Uebersprungen wegen fehlender/inkonsistenter Angaben: {analysis.issue_count}"
+    )
     print(f"CSV-Export abgeschlossen: {export_path} ({len(rows)} Bodies)")
+
+
+def _build_pre_export_message(analysis, can_export):
+    lines = [
+        "Pruefung vor dem CSV-Export",
+        "",
+        f"Exportbereit: {analysis.ready_count}",
+        f"Ausgeschlossen: {analysis.excluded_count}",
+        f"Mit fehlenden/inkonsistenten Angaben: {analysis.issue_count}",
+    ]
+    if analysis.issues_by_body:
+        lines.extend(["", "Details:"])
+        for body_name, issues in analysis.issues_by_body:
+            lines.append(f"- {body_name}:")
+            for issue in issues:
+                lines.append(f"  - {issue}")
+
+    lines.append("")
+    if can_export:
+        lines.append("OK = exportbereite Bodies exportieren.")
+        lines.append("Abbrechen = keine CSV schreiben.")
+    else:
+        lines.append("Es gibt keine exportbereiten Bodies. Es wird keine CSV geschrieben.")
+    return "\n".join(lines)
 
 
 def _pick_export_path(app, ui):

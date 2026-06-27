@@ -78,7 +78,7 @@ Bereich:
 Namespace:
 
 ```text
-DGC.part_metadata
+DIYGarageCut.part_metadata
 ```
 
 ## Felder
