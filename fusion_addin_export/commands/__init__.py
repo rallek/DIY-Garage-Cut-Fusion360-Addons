@@ -1,8 +1,7 @@
-from . import catalog, export, validate
+from . import catalog, export
 
 _COMMAND_MODULES = (
     catalog,
-    validate,
     export,
 )
 

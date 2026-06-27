@@ -1,7 +1,5 @@
-import adsk.core
 import adsk.fusion
 
-import export_config as config
 from commands.export import command_core as export_core
 from shared.catalog import get_type_capabilities, get_type_fields, load_catalog
 
@@ -16,56 +14,22 @@ _SURFACE_ATTRS = (
     export_core._ATTR_KEY_SURFACE_BOTTOM,
 )
 
-_handlers = []
-_active_panel_id = None
-_is_started = False
-_command_created_handler = None
-
-
 class _AnalysisResult:
     def __init__(self):
         self.ready_count = 0
         self.excluded_count = 0
         self.issues_by_body = []
+        self.ready_bodies = []
 
     @property
     def issue_count(self):
         return len(self.issues_by_body)
 
 
-class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
-    def notify(self, args):
-        event_args = adsk.core.CommandCreatedEventArgs.cast(args)
-        cmd = event_args.command
-        on_execute = _CommandExecuteHandler()
-        cmd.execute.add(on_execute)
-        _handlers.append(on_execute)
-
-
-class _CommandExecuteHandler(adsk.core.CommandEventHandler):
-    def notify(self, args):
-        app = adsk.core.Application.get()
-        ui = app.userInterface if app else None
-        if not app or not ui:
-            print("DIYGC Analyse: App/UI nicht verfuegbar.")
-            return
-
-        try:
-            _run_analysis(app, ui)
-        except Exception as exc:
-            print(f"DIYGC Analyse fehlgeschlagen: {exc}")
-            ui.messageBox(f"DIYGC Analyse fehlgeschlagen:\n{exc}")
-
-
-def _run_analysis(app, ui):
+def analyze_visible_bodies(app):
     catalog = _try_load_catalog()
     bodies = _collect_visible_bodies(app)
-    if not bodies:
-        ui.messageBox("DIYGC Analyse\n\nKeine sichtbaren Bodies gefunden.")
-        return
-
-    result = _analyze_bodies(bodies, catalog)
-    ui.messageBox(_format_result_message(result))
+    return _analyze_bodies(bodies, catalog)
 
 
 def _collect_visible_bodies(app):
@@ -131,6 +95,7 @@ def _analyze_bodies(bodies, catalog):
             result.issues_by_body.append((export_core._safe_body_name(body), issues))
         else:
             result.ready_count += 1
+            result.ready_bodies.append(body)
     return result
 
 
@@ -309,100 +274,9 @@ def _try_load_catalog():
         raise RuntimeError(f"Catalog konnte nicht geladen werden: {exc}") from exc
 
 
-def _get_or_create_panel(workspace):
-    global _active_panel_id
-
-    primary = workspace.toolbarPanels.itemById(config.PRIMARY_PANEL_ID)
-    if primary:
-        _active_panel_id = config.PRIMARY_PANEL_ID
-        return primary
-
-    for panel_id in config.PANEL_IDS:
-        candidate = workspace.toolbarPanels.itemById(panel_id)
-        if candidate:
-            _active_panel_id = panel_id
-            return candidate
-
-    tab = workspace.toolbarTabs.itemById(config.CUSTOM_TAB_ID)
-    if not tab:
-        return None
-
-    panel = tab.toolbarPanels.itemById(config.CUSTOM_PANEL_ID)
-    if panel:
-        _active_panel_id = config.CUSTOM_PANEL_ID
-        return panel
-
-    panel = tab.toolbarPanels.add(config.CUSTOM_PANEL_ID, config.CUSTOM_PANEL_NAME, "", False)
-    _active_panel_id = config.CUSTOM_PANEL_ID
-    return panel
-
-
 def start():
-    global _active_panel_id, _is_started, _command_created_handler
-    if _is_started:
-        return
-
-    app = adsk.core.Application.get()
-    ui = app.userInterface
-
-    cmd_def = ui.commandDefinitions.itemById(config.VALIDATE_COMMAND_ID)
-    if not cmd_def:
-        cmd_def = ui.commandDefinitions.addButtonDefinition(
-            config.VALIDATE_COMMAND_ID,
-            config.VALIDATE_COMMAND_NAME,
-            config.VALIDATE_COMMAND_TOOLTIP,
-            config.VALIDATE_COMMAND_RESOURCES,
-        )
-
-    _command_created_handler = _CommandCreatedHandler()
-    cmd_def.commandCreated.add(_command_created_handler)
-    _handlers.append(_command_created_handler)
-    _is_started = True
-
-    workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
-    if not workspace:
-        return
-
-    panel = _get_or_create_panel(workspace)
-    if not panel:
-        return
-
-    control = panel.controls.itemById(config.VALIDATE_COMMAND_ID)
-    if not control:
-        control = panel.controls.addCommand(cmd_def)
-
-    if control:
-        try:
-            control.isPromotedByDefault = True
-            control.isPromoted = True
-        except Exception:
-            pass
+    return
 
 
 def stop():
-    global _active_panel_id, _is_started, _command_created_handler
-    app = adsk.core.Application.get()
-    ui = app.userInterface
-    cmd_def = ui.commandDefinitions.itemById(config.VALIDATE_COMMAND_ID)
-
-    if cmd_def and _command_created_handler:
-        try:
-            cmd_def.commandCreated.remove(_command_created_handler)
-        except Exception:
-            pass
-        _command_created_handler = None
-
-    workspace = ui.workspaces.itemById(config.WORKSPACE_ID)
-    if workspace:
-        panel = workspace.toolbarPanels.itemById(_active_panel_id) if _active_panel_id else None
-        if panel:
-            control = panel.controls.itemById(config.VALIDATE_COMMAND_ID)
-            if control:
-                control.deleteMe()
-
-    if cmd_def:
-        cmd_def.deleteMe()
-
-    _handlers.clear()
-    _active_panel_id = None
-    _is_started = False
+    return

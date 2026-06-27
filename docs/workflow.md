@@ -61,14 +61,16 @@ Im Properties-Addin dafür `Vom Export ausschließen` aktivieren. Der CSV-Export
 
 # Analyse
 
-Im Export-Addin `DIYGC Analyse` ausführen.
+Im Export-Addin `DIY Garage Cut Export` ausführen.
 
-Die Analyse zählt sichtbare Bodies als:
+Vor dem Schreiben der CSV zeigt der Export die Prüfung sichtbarer Bodies:
 - exportbereit
 - ausgeschlossen (`exclude_from_export=true`)
 - mit fehlenden oder inkonsistenten Angaben
 
 Geprüft werden Materialzuordnung, Fräszulage, Kanten- und Oberflächenwerte passend zu den Typ-Capabilities.
+
+Mit `OK` werden nur die exportbereiten Bodies exportiert. Mit `Abbrechen` wird keine CSV geschrieben.
 
 ---
 
