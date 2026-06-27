@@ -13,6 +13,15 @@ _SURFACE_ATTRS = (
     export_core._ATTR_KEY_SURFACE_TOP,
     export_core._ATTR_KEY_SURFACE_BOTTOM,
 )
+_ATTR_LABELS = {
+    export_core._ATTR_KEY_EDGE_FRONT: "Kante vorne",
+    export_core._ATTR_KEY_EDGE_BACK: "Kante hinten",
+    export_core._ATTR_KEY_EDGE_LEFT: "Kante links",
+    export_core._ATTR_KEY_EDGE_RIGHT: "Kante rechts",
+    export_core._ATTR_KEY_SURFACE_TOP: "Oberflaeche oben",
+    export_core._ATTR_KEY_SURFACE_BOTTOM: "Oberflaeche unten",
+    export_core._ATTR_KEY_TRIM_ALLOWANCE_MM: "Fraeszulage",
+}
 
 
 class _BodyAnalysisTarget:
@@ -165,13 +174,15 @@ def _resolve_body_material(body, catalog, issues):
     try:
         return export_core._resolve_catalog_material_ref(body, catalog)
     except ValueError as exc:
-        issues.append(_strip_body_prefix(body, str(exc)))
+        issues.append(_humanize_issue_message(_strip_body_prefix(body, str(exc))))
         return None
 
 
 def _validate_type_fields(catalog_item, material_type, issues):
     properties = catalog_item.properties or {}
     for field in get_type_fields(material_type):
+        if not field.get("csv", False):
+            continue
         key = str(field.get("key", "")).strip()
         if not key:
             continue
@@ -222,12 +233,13 @@ def _validate_edges(body, catalog, capabilities, issues):
         if not edge_id:
             continue
         if not supports_edges:
-            issues.append(f"Kante '{attr_key}' ist gesetzt, obwohl der Materialtyp keine Kanten unterstuetzt.")
+            issues.append(f"{_attr_label(attr_key)} ist gesetzt, obwohl der Materialtyp keine Kanten unterstuetzt.")
             continue
         try:
             export_core._resolve_edge_export_for_side(body, catalog, attr_key)
         except ValueError as exc:
-            issues.append(_strip_body_prefix(body, str(exc)))
+            message = _humanize_issue_message(_strip_body_prefix(body, str(exc)))
+            issues.append(f"{_attr_label(attr_key)}: {message}")
 
 
 def _validate_surfaces(body, catalog, capabilities, issues):
@@ -242,13 +254,14 @@ def _validate_surfaces(body, catalog, capabilities, issues):
             continue
         if not supports_surface:
             issues.append(
-                f"Oberflaeche '{attr_key}' ist gesetzt, obwohl der Materialtyp keine Oberflaechen unterstuetzt."
+                f"{_attr_label(attr_key)} ist gesetzt, obwohl der Materialtyp keine Oberflaechen unterstuetzt."
             )
             continue
         try:
             export_core._resolve_surface_export_for_side(body, catalog, attr_key)
         except ValueError as exc:
-            issues.append(_strip_body_prefix(body, str(exc)))
+            message = _humanize_issue_message(_strip_body_prefix(body, str(exc)))
+            issues.append(f"{_attr_label(attr_key)}: {message}")
 
 
 def _validate_custom_text_pair(label, attr_key, selected_value, custom_text, issues):
@@ -256,7 +269,7 @@ def _validate_custom_text_pair(label, attr_key, selected_value, custom_text, iss
         return
     if custom_text:
         issues.append(
-            f"{label} '{attr_key}' hat Freitext, aber die Auswahl steht nicht auf Freitext."
+            f"{_attr_label(attr_key)} hat Freitext, aber die Auswahl steht nicht auf Freitext."
         )
 
 
@@ -290,6 +303,20 @@ def _strip_body_prefix(body, message):
     if message.startswith(prefix):
         return message[len(prefix):]
     return message
+
+
+def _humanize_issue_message(message):
+    text = str(message or "")
+    for key, label in _ATTR_LABELS.items():
+        text = text.replace(f"'{key}'", label)
+        text = text.replace(key, label)
+    text = text.replace("'material_id'", "Material")
+    text = text.replace("material_id", "Material")
+    return text
+
+
+def _attr_label(attr_key):
+    return _ATTR_LABELS.get(attr_key, attr_key)
 
 
 def _format_result_message(result):
