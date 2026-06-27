@@ -14,6 +14,13 @@ _SURFACE_ATTRS = (
     export_core._ATTR_KEY_SURFACE_BOTTOM,
 )
 
+
+class _BodyAnalysisTarget:
+    def __init__(self, body, component_path):
+        self.body = body
+        self.display_name = _build_body_display_name(body, component_path)
+
+
 class _AnalysisResult:
     def __init__(self):
         self.ready_count = 0
@@ -42,32 +49,34 @@ def _collect_visible_bodies(app):
 
     root = design.rootComponent
     if root:
-        _append_component_bodies(root, bodies, seen_tokens)
-        _append_occurrence_bodies_recursive(root.occurrences, bodies, seen_tokens)
+        root_path = [_safe_component_name(root)]
+        _append_component_bodies(root, root_path, bodies, seen_tokens)
+        _append_occurrence_bodies_recursive(root.occurrences, root_path, bodies, seen_tokens)
     return bodies
 
 
-def _append_component_bodies(component, bodies, seen_tokens):
+def _append_component_bodies(component, component_path, bodies, seen_tokens):
     try:
         for body in component.bRepBodies:
-            _append_body_if_visible(body, bodies, seen_tokens)
+            _append_body_if_visible(body, component_path, bodies, seen_tokens)
     except Exception as exc:
         raise RuntimeError(f"DIYGC Analyse: Component-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
-def _append_occurrence_bodies_recursive(occurrences, bodies, seen_tokens):
+def _append_occurrence_bodies_recursive(occurrences, parent_path, bodies, seen_tokens):
     try:
         if not occurrences:
             return
         for occ in occurrences:
+            occurrence_path = parent_path + [_safe_occurrence_name(occ)]
             for body in occ.bRepBodies:
-                _append_body_if_visible(body, bodies, seen_tokens)
-            _append_occurrence_bodies_recursive(occ.childOccurrences, bodies, seen_tokens)
+                _append_body_if_visible(body, occurrence_path, bodies, seen_tokens)
+            _append_occurrence_bodies_recursive(occ.childOccurrences, occurrence_path, bodies, seen_tokens)
     except Exception as exc:
         raise RuntimeError(f"DIYGC Analyse: Occurrence-Bodies konnten nicht gelesen werden: {exc}") from exc
 
 
-def _append_body_if_visible(body, bodies, seen_tokens):
+def _append_body_if_visible(body, component_path, bodies, seen_tokens):
     if not body:
         return
     try:
@@ -77,26 +86,59 @@ def _append_body_if_visible(body, bodies, seen_tokens):
         if token in seen_tokens:
             return
         seen_tokens.add(token)
-        bodies.append(body)
+        bodies.append(_BodyAnalysisTarget(body, component_path))
     except Exception as exc:
         body_name = export_core._safe_body_name(body)
         raise RuntimeError(f"DIYGC Analyse: Body '{body_name}' konnte nicht gelesen werden: {exc}") from exc
 
 
-def _analyze_bodies(bodies, catalog):
+def _analyze_bodies(targets, catalog):
     result = _AnalysisResult()
-    for body in bodies:
+    for target in targets:
+        body = target.body
         if export_core._is_excluded_from_export(body):
             result.excluded_count += 1
             continue
 
         issues = _validate_export_body(body, catalog)
         if issues:
-            result.issues_by_body.append((export_core._safe_body_name(body), issues))
+            result.issues_by_body.append((target.display_name, issues))
         else:
             result.ready_count += 1
             result.ready_bodies.append(body)
     return result
+
+
+def _build_body_display_name(body, component_path):
+    body_name = export_core._safe_body_name(body)
+    path = [part for part in component_path if part and part != "-"]
+    if not path:
+        return body_name
+    return " / ".join(path + [body_name])
+
+
+def _safe_component_name(component):
+    try:
+        if component and component.name:
+            return str(component.name).strip()
+    except Exception:
+        pass
+    return "Root"
+
+
+def _safe_occurrence_name(occurrence):
+    try:
+        if occurrence and occurrence.name:
+            return str(occurrence.name).strip()
+    except Exception:
+        pass
+    try:
+        component = occurrence.component if occurrence else None
+        if component and component.name:
+            return str(component.name).strip()
+    except Exception:
+        pass
+    return "Komponente"
 
 
 def _validate_export_body(body, catalog):
