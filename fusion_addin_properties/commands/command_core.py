@@ -258,6 +258,8 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         global _ui_lang
         _ui_lang = _detect_ui_lang()
+        _clear_body_selection_memory()
+        _clear_front_face_memory()
 
         event_args = adsk.core.CommandCreatedEventArgs.cast(args)
         cmd = event_args.command
@@ -401,6 +403,16 @@ class _CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
         cmd.validateInputs.add(on_validate)
         _handlers.append(on_validate)
 
+        on_destroy = _CommandDestroyHandler()
+        cmd.destroy.add(on_destroy)
+        _handlers.append(on_destroy)
+
+
+class _CommandDestroyHandler(adsk.core.CommandEventHandler):
+    def notify(self, args):
+        _clear_body_selection_memory()
+        _clear_front_face_memory()
+
 
 class _InputChangedHandler(adsk.core.InputChangedEventHandler):
     def notify(self, args):
@@ -451,7 +463,7 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
 
             if changed.id == _INPUT_EDGES_ENABLED:
-                _update_edge_surface_ui(inputs, restore_front_face=False, preview_edge=True, preview_surface=True)
+                _update_edge_surface_ui(inputs, restore_front_face=False)
                 return
 
             if changed.id == _INPUT_FRONT_FACE:
@@ -466,7 +478,6 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                     inputs, body, preserve_current_mode=True, preserve_edges_enabled=True
                 )
                 _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
                 return
 
             if changed.id in (
@@ -478,33 +489,31 @@ class _InputChangedHandler(adsk.core.InputChangedEventHandler):
                 _INPUT_BOTTOM_ENABLED,
             ):
                 _set_edge_dropdown_enabled_state(inputs)
-                _apply_edge_appearance_preview(inputs)
-                _apply_surface_appearance_preview(inputs)
                 return
 
             if changed.id == _INPUT_SWAP_SURFACES:
                 _swap_surface_inputs(inputs)
-                _update_edge_surface_ui(inputs, preview_surface=True)
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id == _INPUT_SWAP_LEFT_RIGHT:
                 _swap_left_right_edge_inputs(inputs)
-                _update_edge_surface_ui(inputs, preview_edge=True)
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id == _INPUT_EDGE_MODE:
-                _update_edge_surface_ui(inputs, preview_edge=True, preview_surface=True)
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id == _INPUT_ALL_SURFACE:
-                _update_edge_surface_ui(inputs, preview_surface=True)
+                _update_edge_surface_ui(inputs)
                 return
 
             if changed.id in (_INPUT_EDGE_ALL, _INPUT_EDGE_FRONT, _INPUT_EDGE_BACK, _INPUT_EDGE_LEFT, _INPUT_EDGE_RIGHT):
-                _update_edge_surface_ui(inputs, preview_edge=True)
+                _update_edge_surface_ui(inputs)
                 return
             if changed.id in (_INPUT_TOP_SURFACE, _INPUT_BOTTOM_SURFACE):
-                _update_edge_surface_ui(inputs, preview_surface=True)
+                _update_edge_surface_ui(inputs)
                 return
             if changed.id == _INPUT_APPLY:
                 _handle_apply_button(inputs)
@@ -652,13 +661,17 @@ def _save_properties_from_inputs(inputs, ui):
 
     if entry.supports_edges and edge_mode == "individual" and side_faces:
         _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
-    if entry.supports_surface:
+    elif entry.supports_edges and (edge_mode == "individual" or not edge_section_enabled):
+        _reset_canonical_side_face_appearances(body)
+    if entry.supports_surface and entry.supports_edges:
         _apply_surface_appearance_from_body_faces(
             body,
             surface_values,
             include_edges=entry.supports_edges and edge_mode == "all",
             allow_missing_empty_faces=not _has_any_surface_value(surface_values),
         )
+    elif entry.supports_surface:
+        _apply_global_surface_appearance_to_body_faces(body, surface_values)
 
     if _is_body_likely_read_only(body):
         diag = _diagnose_attribute_context(body)
@@ -1127,14 +1140,10 @@ def _render_edge_surface_ui(inputs, restore_front_face=True):
     _set_input_visibility(inputs, _INPUT_SWAP_SURFACES, surface_visible)
 
 
-def _update_edge_surface_ui(inputs, restore_front_face=True, preview_edge=False, preview_surface=False):
+def _update_edge_surface_ui(inputs, restore_front_face=True):
     body = _read_selected_body(inputs)
     try:
         _render_edge_surface_ui(inputs, restore_front_face=restore_front_face)
-        if preview_edge:
-            _apply_edge_appearance_preview(inputs)
-        if preview_surface:
-            _apply_surface_appearance_preview(inputs)
     finally:
         if body:
             _restore_body_selection_from_memory(inputs)
@@ -1825,47 +1834,6 @@ def _custom_text_input_for_attr(attr_key):
     return mapping.get(attr_key, "")
 
 
-def _apply_edge_appearance_preview(inputs):
-    body = _read_selected_body(inputs)
-    if not body:
-        return
-    try:
-        edge_values = (
-            _read_edge_values_for_mode(inputs)
-            if _is_edges_enabled(inputs)
-            else {
-                ATTR_KEY_EDGE_FRONT: "",
-                ATTR_KEY_EDGE_BACK: "",
-                ATTR_KEY_EDGE_LEFT: "",
-                ATTR_KEY_EDGE_RIGHT: "",
-            }
-        )
-        side_faces, _front_ref = _resolve_side_faces_from_front_selection(inputs, body)
-        if not side_faces:
-            return
-        _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values)
-    except Exception as exc:
-        print(f"Properties: Kanten-Preview fehlgeschlagen: {exc}")
-
-
-def _apply_surface_appearance_preview(inputs):
-    body = _read_selected_body(inputs)
-    if not body:
-        return
-    try:
-        edge_mode = _read_mode_dropdown(inputs, _INPUT_EDGE_MODE, "none")
-        surface_values = (
-            _read_surface_values_for_mode(inputs)
-            if _is_edges_enabled(inputs)
-            else {ATTR_KEY_SURFACE_TOP: "", ATTR_KEY_SURFACE_BOTTOM: ""}
-        )
-        _apply_surface_appearance_from_body_faces(
-            body, surface_values, include_edges=_is_edges_enabled(inputs) and edge_mode == "all"
-        )
-    except Exception as exc:
-        print(f"Properties: Oberflächen-Preview fehlgeschlagen: {exc}")
-
-
 def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
     attr_to_side = {
         ATTR_KEY_EDGE_FRONT: "front",
@@ -1894,6 +1862,12 @@ def _apply_edge_appearance_from_resolved_faces(body, side_faces, edge_values):
             face.appearance = appearance
         except Exception as exc:
             raise RuntimeError(f"Kanten-Appearance konnte nicht gesetzt werden: {exc}") from exc
+
+
+def _reset_canonical_side_face_appearances(body):
+    appearance = _body_material_appearance(body)
+    for face in _detect_canonical_side_faces(body).values():
+        _apply_face_appearance_or_raise(face, appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden")
 
 
 def _write_or_clear_body_attribute(body, attr_key, value):
@@ -1997,6 +1971,20 @@ def _apply_surface_appearance_from_body_faces(
         appearance = _surface_appearance_or_base(all_surface_id, base_appearance)
         for face in _detect_canonical_side_faces(body).values():
             _apply_face_appearance_or_raise(face, appearance, "Kanten-Oberflächen-Appearance konnte nicht gesetzt werden")
+
+
+def _apply_global_surface_appearance_to_body_faces(body, surface_values):
+    surface_id = str((surface_values or {}).get(ATTR_KEY_SURFACE_TOP, "") or "").strip()
+    if not surface_id:
+        surface_id = str((surface_values or {}).get(ATTR_KEY_SURFACE_BOTTOM, "") or "").strip()
+    appearance = _surface_appearance_or_base(surface_id, _body_material_appearance(body))
+    faces = getattr(body, "faces", None)
+    if not faces:
+        raise RuntimeError("Globale Oberfläche konnte nicht gesetzt werden: Body hat keine Faces.")
+    for index in range(faces.count):
+        face = adsk.fusion.BRepFace.cast(faces.item(index))
+        if face:
+            _apply_face_appearance_or_raise(face, appearance, "Globale Oberflächen-Appearance konnte nicht gesetzt werden")
 
 
 def _surface_appearance_or_base(surface_id, base_appearance):

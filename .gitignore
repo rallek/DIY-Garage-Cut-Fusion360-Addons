@@ -19,3 +19,5 @@ Thumbs.db
 *.tmp
 *.bak
 
+# Local archived Codex discussions
+_Threads/

@@ -189,6 +189,76 @@
       "appearance_resolved_name": "Farbe weiß",
       "appearance_id": "Generic",
       "appearance_has_texture": false
+    },
+    {
+      "id": "sheet.queenply",
+      "type": "sheet",
+      "name": "Queenply",
+      "appearance": "Bambus hell - Halbglanz",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "yes",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "Bambus hell - Halbglanz",
+      "appearance_id": "Prism-322",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_bamboo_light_color.jpg",
+      "appearance_texture_preview": "wood_bamboo_light_color.jpg",
+      "preview_texture": "wood_bamboo_light_color.jpg"
+    },
+    {
+      "id": "sheet.queenply_weiss",
+      "type": "sheet",
+      "name": "Queenply weiß",
+      "appearance": "ABS (Weiß)",
+      "sheet_default_trim_allowance": 2.0,
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "ABS (Weiß)",
+      "appearance_id": "Prism-374",
+      "appearance_has_texture": false
+    },
+    {
+      "id": "sheet.multiplex",
+      "type": "sheet",
+      "name": "Multiplex",
+      "appearance": "Eiche - Halbglanz",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "yes",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "Eiche - Halbglanz",
+      "appearance_id": "Prism-145",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_oak_color.jpg",
+      "appearance_texture_preview": "wood_oak_color.jpg",
+      "appearance_texture_color": "wood_oak_bump.jpg",
+      "preview_texture": "wood_oak_color.jpg"
+    },
+    {
+      "id": "sheet.siebdruckplatte",
+      "type": "sheet",
+      "name": "Siebdruckplatte",
+      "appearance": "Farbe - Emaille glänzend (Schwarz)",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "Farbe - Emaille glänzend (Schwarz)",
+      "appearance_id": "Prism-089",
+      "appearance_has_texture": false
+    },
+    {
+      "id": "sheet.osb",
+      "type": "sheet",
+      "name": "OSB",
+      "appearance": "Bambus hell - Halbglanz",
+      "sheet_default_trim_allowance": 0.0,
+      "sheet_has_grain": "none",
+      "sheet_default_grain_direction": "none",
+      "appearance_resolved_name": "Bambus hell - Halbglanz",
+      "appearance_id": "Prism-322",
+      "appearance_has_texture": true,
+      "appearance_texture_other": "wood_bamboo_light_color.jpg",
+      "appearance_texture_preview": "wood_bamboo_light_color.jpg",
+      "preview_texture": "wood_bamboo_light_color.jpg"
     }
   ]
 }
