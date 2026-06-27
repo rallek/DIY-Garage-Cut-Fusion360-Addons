@@ -225,18 +225,102 @@ class Issue20ValidateTests(unittest.TestCase):
         self.assertEqual(result.issue_count, 0)
         self.assertEqual(result.ready_count, 1)
 
-    def test_missing_csv_catalog_field_blocks_export_readiness(self):
+    def test_missing_csv_catalog_field_with_type_default_is_export_ready(self):
+        body = _body(
+            "side",
+            material_id="sheet.mdf",
+            trim_allowance_mm="0",
+        )
+        catalog = _FakeCatalog([_FakeCatalogItem("sheet.mdf", "sheet", "MDF")])
+
+        result = _analyze([body], catalog)
+
+        self.assertEqual(result.issue_count, 0)
+        self.assertEqual(result.ready_count, 1)
+
+    def test_invalid_csv_catalog_field_blocks_export_readiness(self):
         body = _body(
             "side",
             material_id="sheet.white",
             trim_allowance_mm="1.0",
         )
-        catalog = _FakeCatalog([_FakeCatalogItem("sheet.white", "sheet", "White")])
+        catalog = _FakeCatalog(
+            [
+                _FakeCatalogItem(
+                    "sheet.white",
+                    "sheet",
+                    "White",
+                    properties={"sheet_default_trim_allowance": "abc"},
+                )
+            ]
+        )
 
         result = _analyze([body], catalog)
 
         self.assertEqual(result.issue_count, 1)
-        self.assertIn("exportrelevantes Katalogfeld", "\n".join(result.issues_by_body[0][1]))
+        self.assertIn("nicht numerisch", "\n".join(result.issues_by_body[0][1]))
+
+    def test_zero_trim_allowance_values_are_export_ready(self):
+        catalog = _FakeCatalog(
+            [
+                _FakeCatalogItem(
+                    "sheet.mdf",
+                    "sheet",
+                    "MDF",
+                    properties={"sheet_default_trim_allowance": 0.0},
+                ),
+                _FakeCatalogItem(
+                    "sheet.white",
+                    "sheet",
+                    "White",
+                    properties={"sheet_default_trim_allowance": "0.0"},
+                ),
+            ]
+        )
+
+        cases = [
+            ("sheet.mdf", 0),
+            ("sheet.mdf", 0.0),
+            ("sheet.mdf", "0"),
+            ("sheet.white", 0),
+            ("sheet.white", "0.0"),
+        ]
+        for material_id, value in cases:
+            with self.subTest(material_id=material_id, value=value):
+                body = _body(
+                    f"{material_id}-{value}",
+                    material_id=material_id,
+                    trim_allowance_mm=value,
+                )
+
+                result = _analyze([body], catalog)
+
+                self.assertEqual(result.issue_count, 0)
+                self.assertEqual(result.ready_count, 1)
+
+    def test_empty_trim_allowance_is_reported_missing(self):
+        body = _body(
+            "side",
+            material_id="sheet.white",
+            trim_allowance_mm="",
+        )
+
+        result = _analyze([body], _FakeCatalog([_sheet_item()]))
+
+        self.assertEqual(result.issue_count, 1)
+        self.assertIn("Fräszulage fehlt", "\n".join(result.issues_by_body[0][1]))
+
+    def test_invalid_trim_allowance_is_reported(self):
+        body = _body(
+            "side",
+            material_id="sheet.white",
+            trim_allowance_mm="abc",
+        )
+
+        result = _analyze([body], _FakeCatalog([_sheet_item()]))
+
+        self.assertEqual(result.issue_count, 1)
+        self.assertIn("nicht numerisch", "\n".join(result.issues_by_body[0][1]))
 
     def test_selected_component_scope_ignores_bodies_outside_scope(self):
         root_body = _body("root", material_id="missing")
