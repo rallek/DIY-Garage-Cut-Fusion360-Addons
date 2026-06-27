@@ -61,9 +61,14 @@ Im Properties-Addin dafür `Vom Export ausschließen` aktivieren. Der CSV-Export
 
 # Analyse
 
-Export-Addin prüft:
-- Eigenschaften vollständig
-- oder ausgeschlossen
+Im Export-Addin `DIYGC Analyse` ausführen.
+
+Die Analyse zählt sichtbare Bodies als:
+- exportbereit
+- ausgeschlossen (`exclude_from_export=true`)
+- mit fehlenden oder inkonsistenten Angaben
+
+Geprüft werden Materialzuordnung, Fräszulage, Kanten- und Oberflächenwerte passend zu den Typ-Capabilities.
 
 ---
 

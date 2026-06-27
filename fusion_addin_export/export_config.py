@@ -21,3 +21,8 @@ CATALOG_COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_CatalogCommand"
 CATALOG_COMMAND_NAME = "DIYGC Katalog"
 CATALOG_COMMAND_TOOLTIP = "Material-/Artikelkatalog anzeigen und pflegen."
 CATALOG_COMMAND_RESOURCES = "./Resources/catalog"
+
+VALIDATE_COMMAND_ID = f"{COMPANY_NAME}_{ADDIN_NAME}_ValidateCommand"
+VALIDATE_COMMAND_NAME = "DIYGC Analyse"
+VALIDATE_COMMAND_TOOLTIP = "Prueft sichtbare Bodies auf exportbereite Eigenschaften."
+VALIDATE_COMMAND_RESOURCES = "./Resources/export"
