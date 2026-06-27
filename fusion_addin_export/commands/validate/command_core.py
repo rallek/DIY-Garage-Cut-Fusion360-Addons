@@ -327,12 +327,12 @@ def _validate_type_fields(catalog_item, material_type, issues):
         key = str(field.get("key", "")).strip()
         if not key:
             continue
-        if key not in properties:
+        has_value, value = _catalog_field_value_or_default(properties, key, field)
+        if not has_value:
             issues.append(
                 f"Material '{catalog_item.name}': exportrelevantes Katalogfeld '{_field_label(field)}' fehlt."
             )
             continue
-        value = properties.get(key)
         kind = field.get("kind")
         if kind == "number":
             _validate_number_field(key, value, field, f"Material '{catalog_item.name}'", issues)
@@ -344,6 +344,15 @@ def _validate_type_fields(catalog_item, material_type, issues):
                 )
 
 
+def _catalog_field_value_or_default(properties, key, field):
+    value = properties.get(key)
+    if value is not None and str(value).strip() != "":
+        return True, value
+    if "default" in field:
+        return True, field.get("default")
+    return False, value
+
+
 def _validate_trim_allowance(body, material_type, issues):
     if not export_core._material_type_supports_trim_allowance(material_type):
         value = export_core._resolve_text_attribute_for_export(body, export_core._ATTR_KEY_TRIM_ALLOWANCE_MM)
@@ -352,18 +361,19 @@ def _validate_trim_allowance(body, material_type, issues):
         return
 
     raw = export_core._resolve_text_attribute_for_export(body, export_core._ATTR_KEY_TRIM_ALLOWANCE_MM)
-    if not raw:
+    raw_text = "" if raw is None else str(raw).strip()
+    if raw_text in ("", "-"):
         issues.append("Fräszulage fehlt.")
         return
 
     field = _type_field_by_key(material_type, "sheet_default_trim_allowance")
     if field:
-        _validate_number_field("trim_allowance_mm", raw, field, "Body", issues)
+        _validate_number_field("trim_allowance_mm", raw_text, field, "Body", issues)
         return
     try:
-        float(str(raw).replace(",", "."))
+        float(raw_text.replace(",", "."))
     except Exception:
-        issues.append(f"Fräszulage ist nicht numerisch: '{raw}'.")
+        issues.append(f"Fräszulage ist nicht numerisch: '{raw_text}'.")
 
 
 def _validate_edges(body, catalog, capabilities, issues):

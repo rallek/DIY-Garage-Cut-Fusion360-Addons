@@ -668,7 +668,7 @@ def _resolve_text_attribute_for_export(body, attr_key):
             continue
         if key != attr_key:
             continue
-        return str(value or "").strip()
+        return "" if value is None else str(value).strip()
     return ""
 
 
