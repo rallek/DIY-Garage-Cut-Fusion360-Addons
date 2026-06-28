@@ -5,6 +5,8 @@ import sys
 import adsk.core
 import adsk.fusion
 
+from shared.catalog import get_catalog_types
+
 _COMMANDS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _COMMANDS_DIR not in sys.path:
     sys.path.insert(0, _COMMANDS_DIR)
