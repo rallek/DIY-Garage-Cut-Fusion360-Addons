@@ -90,16 +90,15 @@ class AppearanceApplier:
             ATTR_KEY_EDGE_RIGHT: "right",
         }
         base_appearance = self.body_material_appearance(body)
-        for face in _detect_canonical_side_faces(body).values():
-            _apply_face_appearance_or_raise(
-                face, base_appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden"
-            )
         for attr_key, side in attr_to_side.items():
             face = side_faces.get(side)
             if not face:
                 continue
             edge_id = str(edge_values.get(attr_key, "") or "").strip()
             if not edge_id or edge_id == CUSTOM_TEXT_VALUE:
+                _apply_face_appearance_or_raise(
+                    face, base_appearance, "Kanten-Appearance konnte nicht zurückgesetzt werden"
+                )
                 continue
             edge_entry = self._edge_by_id.get(edge_id)
             if not edge_entry:
